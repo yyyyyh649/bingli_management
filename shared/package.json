@@ -1,0 +1,11 @@
+{
+  "name": "@optical/shared",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./schema.sql": "./schema.sql",
+    "./constants.js": "./constants.js",
+    "./questionnaire.js": "./questionnaire.js"
+  }
+}
