@@ -44,8 +44,10 @@ export default function CustomerProfile() {
   }, [phone]);
 
   const currentPoints = useMemo(() => {
-    if (!data?.points_ledger) return 0;
-    return data.points_ledger.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+    // 后端已聚合返回 totalPoints，优先用；缺失时本地 reduce 兜底
+    if (data?.totalPoints != null) return data.totalPoints;
+    if (!data?.pointsLedger) return 0;
+    return data.pointsLedger.reduce((sum, p) => sum + Number(p.amount || 0), 0);
   }, [data]);
 
   if (loading) {
@@ -61,7 +63,7 @@ export default function CustomerProfile() {
   }
 
   const customer = data.customer || {};
-  const points = data.points_ledger || [];
+  const points = data.pointsLedger || [];
   const cases = data.cases || [];
   const prescriptions = data.prescriptions || [];
 

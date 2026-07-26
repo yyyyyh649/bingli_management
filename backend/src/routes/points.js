@@ -7,6 +7,7 @@ import { recordChange, withChangeTx } from '../lib/outbox.js';
 import { nowISO, POINTS_SOURCE } from '@optical/shared/constants.js';
 import { checkDeletePassword } from '../lib/password.js';
 import { findDuplicatePoints } from '../lib/duplicate.js';
+import { ensureCustomer } from '../lib/customer.js';
 import { triggerPointsImmediatePush } from '../sync/index.js';
 
 const router = Router();
@@ -85,6 +86,8 @@ router.post(
     };
 
     withChangeTx(db, () => {
+      // 手动加减积分时，若客户不存在也自动建 stub 档案
+      ensureCustomer(db, { phone: customerPhone, operator: String(operator || '') });
       db.prepare(
         `INSERT INTO points_ledger (id, customer_phone, amount, source_type, related_prescription_id, note, store, operator, created_at, sync_status)
          VALUES (@id, @customer_phone, @amount, @source_type, @related_prescription_id, @note, @store, @operator, @created_at, @sync_status)`
