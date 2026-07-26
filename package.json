@@ -1,0 +1,21 @@
+{
+  "name": "optical-shop-system",
+  "version": "0.1.0",
+  "description": "眼镜店验光单/病例登记系统（本地单店闭环 + 云端同步预留）",
+  "private": true,
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "init-db": "node server/scripts/init-db.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.3.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "uuid": "^9.0.1"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
