@@ -1,5 +1,12 @@
 node_modules/
 data/
+dist/
 .env
 *.log
 .DS_Store
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+backend/public/
+deploy/cloud/certs/

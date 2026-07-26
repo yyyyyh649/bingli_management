@@ -1,0 +1,10 @@
+node_modules\
+data\
+.git\
+backend\public\
+deploy\cloud\certs\
+*.log
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
