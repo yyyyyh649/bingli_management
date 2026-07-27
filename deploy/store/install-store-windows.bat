@@ -60,9 +60,9 @@ if "!STORE_ID!"=="" (
   pause
   exit /b 1
 )
-REM 输入清洗：仅允许英文字母和数字
-echo !STORE_ID!| findstr /r "^[a-zA-Z0-9]\+$" >nul 2>&1
-if %errorlevel% neq 0 (
+REM 输入清洗：仅允许英文字母和数字（用 PowerShell 做正则校验，findstr 的 \+ 不可靠）
+for /f "delims=" %%r in ('powershell -NoProfile -Command "if ('!STORE_ID!' -match '^[a-zA-Z0-9]+$') { 'ok' } else { 'fail' }"') do set "CHECK=%%r"
+if not "!CHECK!"=="ok" (
   echo [错误] STORE_ID 只能包含英文字母和数字（不允许中文、空格、下划线、连字符等）
   pause
   exit /b 1
