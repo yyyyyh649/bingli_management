@@ -40,6 +40,19 @@ if %errorlevel% neq 0 (
 for /f "delims=" %%v in ('node -v') do set NODE_VER=%%v
 echo [INFO] Node.js 版本：!NODE_VER!
 
+REM 抓取 node.exe 的实际绝对路径（Node 是全局安装的，不会在项目 backend 目录里）
+REM where node 可能返回多行（如 node.exe + node.cmd），取第一个真实 .exe
+set NODE_EXE=
+for /f "delims=" %%p in ('where node') do (
+  if "!NODE_EXE!"=="" set NODE_EXE=%%p
+)
+if "!NODE_EXE!"=="" (
+  echo [错误] 无法获取 node.exe 的路径
+  pause
+  exit /b 1
+)
+echo [INFO] node.exe 路径：!NODE_EXE!
+
 REM ---------- 收集参数 ----------
 set /p STORE_ID="请输入 STORE_ID（store1 / store2）: "
 if not "!STORE_ID!"=="store1" if not "!STORE_ID!"=="store2" (
@@ -140,7 +153,7 @@ if %errorlevel% neq 0 (
 nssm stop !SERVICE_NAME! >nul 2>&1
 nssm remove !SERVICE_NAME! confirm >nul 2>&1
 
-nssm install !SERVICE_NAME! "!INSTALL_DIR!\backend\node.exe" "src\index.js"
+nssm install !SERVICE_NAME! "!NODE_EXE!" "src\index.js"
 nssm set !SERVICE_NAME! AppDirectory "!INSTALL_DIR!\backend"
 nssm set !SERVICE_NAME! AppEnvironmentExtra "STORE_ID=!STORE_ID!" "PORT=!PORT!" "DB_PATH=!INSTALL_DIR!\backend\data\local.db" "DELETE_PASSWORD=safe@safe" "CLOUD_SERVER_URL=!CLOUD_URL!" "SYNC_SECRET=!SYNC_SECRET!" "SYNC_ENABLED=true" "SYNC_INTERVAL_MS=5000"
 nssm set !SERVICE_NAME! Start SERVICE_AUTO_START
