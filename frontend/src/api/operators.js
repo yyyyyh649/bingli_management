@@ -20,7 +20,7 @@ export function deleteOperator(id, password) {
 // 自定义 hook：缓存 operator 列表，多个表单复用
 import { useState, useEffect, useCallback } from 'react';
 
-let cache = null; // 模块级缓存，跨组件复用
+let cache = null; // 模块级缓存，跨组件复用（仅作初始值，每次挂载仍会刷新）
 
 export function useOperators() {
   const [operators, setOperators] = useState(cache || []);
@@ -41,8 +41,8 @@ export function useOperators() {
     }
   }, []);
 
+  // 每次挂载都刷新，避免后台新增登记人后表单仍用旧缓存
   useEffect(() => {
-    if (cache) return;
     refresh();
   }, [refresh]);
 
