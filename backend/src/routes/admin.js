@@ -6,6 +6,7 @@ import { createReadStream, statSync, unlinkSync } from 'node:fs';
 import { resolve } from 'node:path';
 import * as XLSX from 'xlsx';
 import { PRESCRIPTION_STEPS, PRESCRIPTION_STEP_LABELS } from '@optical/shared/constants.js';
+import { EYE_EXAM_ITEMS } from '@optical/shared/questionnaire.js';
 
 const router = Router();
 
@@ -63,7 +64,7 @@ function flattenPrescription(row) {
   return out;
 }
 
-// 把病例记录展开（复杂模式的 answers 展开）
+// 把病例记录展开（复杂模式展开7模块数据：主诉病史问答/全身检查/眼科13项/特殊检查/诊断/治疗/手术摘要）
 function flattenCase(row) {
   const base = {
     id: row.id,
@@ -72,19 +73,69 @@ function flattenCase(row) {
     customer_phone: row.customer_phone,
     customer_gender: row.customer_gender,
     customer_address: row.customer_address,
-    condition: row.condition,
+    condition: row.condition || '',
     record_date: row.record_date,
     store: row.store,
     operator: row.operator,
     created_at: row.created_at,
   };
-  if (row.mode === 'complex') {
-    const answers = safeParse(row.answers, []);
-    answers.forEach((a, i) => {
+  if (row.mode !== 'complex') return base;
+
+  const an = safeParse(row.answers, {});
+  // 旧格式兼容：若 answers 是数组（旧版仅问答），按问答展开
+  if (Array.isArray(an)) {
+    an.forEach((a, i) => {
       base[`Q${i + 1}_${a.questionText || a.questionId || ''}`] =
         a.selectedLabel + (a.otherText ? ` (${a.otherText})` : '');
     });
+    return base;
   }
+
+  // 模块1 主诉与病史（问答）
+  base['主诉病史问答'] = (an.intake_answers || [])
+    .map((x) => `${x.questionText || x.questionId}→${x.selectedLabel}${x.otherText ? '(' + x.otherText + ')' : ''}`)
+    .join('；');
+
+  // 模块2 全身检查
+  const v = an.vitals || {};
+  base['体温'] = v.T || '';
+  base['脉搏'] = v.P || '';
+  base['呼吸'] = v.R || '';
+  base['血压'] = v.BP || '';
+  base['全身情况'] = (v.general || '') + (v.generalNote ? '(' + v.generalNote + ')' : '');
+
+  // 模块3 眼科检查（13项 × OD/OS）
+  const ee = an.eye_exam || {};
+  for (const eye of ['od', 'os']) {
+    for (const it of EYE_EXAM_ITEMS) {
+      const cell = (ee[eye] || {})[it];
+      base[`${it}(${eye.toUpperCase()})`] = cell
+        ? (cell.value || '') + (cell.note ? '(' + cell.note + ')' : '')
+        : '';
+    }
+  }
+
+  // 模块4 特殊检查
+  const se = an.special_exam || {};
+  base['角膜曲率'] = se.keratometry || '';
+  base['OCT'] = se.oct || '';
+  base['A超'] = se.a_scan || '';
+  base['B超'] = se.b_scan || '';
+  base['化验'] = se.lab || '';
+  base['视野'] = se.visual_field || '';
+
+  // 模块5 初步诊断 / 模块6 治疗计划
+  base['初步诊断'] = (an.diagnosis || []).join('、');
+  base['治疗计划'] = (an.treatment_plan || []).join('、');
+
+  // 模块7 手术摘要
+  const sg = an.surgery || {};
+  const parts = [];
+  if (sg.surgical_record && sg.surgical_record.surgery_name) parts.push('手术:' + sg.surgical_record.surgery_name);
+  if (sg.anesthesia_pre_assessment && sg.anesthesia_pre_assessment.method) parts.push('麻醉:' + sg.anesthesia_pre_assessment.method);
+  if (sg.followup_visits && sg.followup_visits.length) parts.push(`随访${sg.followup_visits.length}次`);
+  base['手术摘要'] = parts.join('；');
+
   return base;
 }
 

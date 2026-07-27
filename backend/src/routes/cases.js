@@ -58,7 +58,10 @@ router.post(
       customer_gender: String(customerGender || ''),
       customer_address: String(customerAddress || ''),
       condition: String(condition || ''),
-      answers: JSON.stringify(answers || []),
+      answers:
+        typeof answers === 'string'
+          ? answers
+          : JSON.stringify(answers || []),
       record_date: recDate,
       store,
       operator: String(operator || ''),
