@@ -117,12 +117,16 @@ if %errorlevel% neq 0 (
 )
 
 echo [INFO] 构建前端...
+REM vite 在 devDependencies，构建前需单独装 frontend 的 dev 依赖
+call npm install --workspace=frontend
 call npm run build:frontend
 if %errorlevel% neq 0 (
   echo [错误] 前端构建失败
   pause
   exit /b 1
 )
+REM 构建完清理 dev 依赖，减小体积
+call npm prune --omit=dev
 
 REM ---------- 生成配置 ----------
 echo [INFO] 生成 backend\.env...

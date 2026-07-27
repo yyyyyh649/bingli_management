@@ -79,7 +79,11 @@ info "安装依赖"
 npm install --omit=dev
 
 info "构建前端到 backend/public"
+# vite 在 devDependencies，构建前需单独装 frontend 的 dev 依赖
+npm install --workspace=frontend
 npm run build:frontend
+# 构建完清理 dev 依赖，减小体积
+npm prune --omit=dev
 
 # ---------- 5. 生成配置 ----------
 info "生成 backend/.env"
