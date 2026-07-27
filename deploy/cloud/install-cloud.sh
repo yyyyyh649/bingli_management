@@ -113,7 +113,11 @@ node scripts/init-db.js
 # ---------- 7. 构建前端并拷贝到 backend/public ----------
 info "构建前端到 backend/public"
 cd "$INSTALL_DIR"
+# vite 在 devDependencies，必须装 dev 才能构建
+npm install --workspace=frontend
 npm run build:frontend
+# 构建完清理 dev 依赖，减小体积
+npm prune --omit=dev
 
 # ---------- 8. 权限 ----------
 chown -R "$RUN_USER:$RUN_USER" "$INSTALL_DIR"
