@@ -54,9 +54,16 @@ if "!NODE_EXE!"=="" (
 echo [INFO] node.exe 路径：!NODE_EXE!
 
 REM ---------- 收集参数 ----------
-set /p STORE_ID="请输入 STORE_ID（store1 / store2）: "
-if not "!STORE_ID!"=="store1" if not "!STORE_ID!"=="store2" (
-  echo [错误] STORE_ID 必须是 store1 或 store2
+set /p STORE_ID="请输入店铺标识 STORE_ID（自定义，例如 store1 / 朝阳店 / 望京店，仅限中英文数字）: "
+if "!STORE_ID!"=="" (
+  echo [错误] STORE_ID 必填
+  pause
+  exit /b 1
+)
+REM 输入清洗：仅允许中文、英文字母、数字、下划线、连字符；含其他字符直接报错
+echo !STORE_ID!| findstr /r "^[\u4e00-\u9fa5a-zA-Z0-9_-]\+$" >nul 2>&1
+if %errorlevel% neq 0 (
+  echo [错误] STORE_ID 只能包含中文、英文字母、数字、下划线、连字符
   pause
   exit /b 1
 )

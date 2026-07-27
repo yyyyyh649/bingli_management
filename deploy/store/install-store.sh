@@ -8,7 +8,7 @@
 #   sudo STORE_ID=store1 bash deploy/store/install-store.sh
 #
 # 环境变量：
-#   STORE_ID       必填，store1 或 store2
+#   STORE_ID       必填，自定义（例如 store1 / 朝阳店 / 望京店，仅限中英文数字下划线连字符）
 #   CLOUD_URL      必填，云端域名（例如 https://cloud.example.com）
 #   SYNC_SECRET    必填，与云端一致的同步密钥
 #   PORT           可选，本地端口（默认 3000）
@@ -35,8 +35,10 @@ SYNC_SECRET="${SYNC_SECRET:-}"
 PORT="${PORT:-3000}"
 
 # ---------- 1. 收集参数 ----------
-[[ -n "$STORE_ID" ]] || read -rp "请输入 STORE_ID（store1 / store2）: " STORE_ID
-[[ "$STORE_ID" == "store1" || "$STORE_ID" == "store2" ]] || fatal "STORE_ID 必须是 store1 或 store2"
+[[ -n "$STORE_ID" ]] || read -rp "请输入 STORE_ID（自定义，例如 store1 / 朝阳店 / 望京店）: " STORE_ID
+[[ -n "$STORE_ID" ]] || fatal "STORE_ID 必填"
+# 仅允许中英文/数字/下划线/连字符
+[[ "$STORE_ID" =~ ^[a-zA-Z0-9_-]+$ || "$STORE_ID" =~ ^[\x{4e00}-\x{9fa5}a-zA-Z0-9_-]+$ ]] || fatal "STORE_ID 只能包含中文、英文字母、数字、下划线、连字符"
 
 [[ -n "$CLOUD_URL" ]] || read -rp "请输入云端域名（例如 https://cloud.example.com）: " CLOUD_URL
 [[ -n "$CLOUD_URL" ]] || fatal "云端域名必填"
