@@ -92,7 +92,7 @@ router.get('/:phone/profile', (req, res) => {
 router.post(
   '/',
   asyncHandler(async (req, res) => {
-    const { phone, name, memberCardNo, address } = req.body || {};
+    const { phone, name, memberCardNo, address, operator } = req.body || {};
     const cleanPhone = String(phone || '').trim();
     if (!validatePhone(cleanPhone)) throw new ApiError('手机号格式不正确（需 11 位数字）');
     const db = getDb();
@@ -127,7 +127,7 @@ router.post(
       member_card_no: memberCardNo ? String(memberCardNo).trim() : null,
       address: String(address || ''),
       store,
-      operator: '',
+      operator: String(operator || ''),
       created_at: now,
       updated_at: now,
       sync_status: 'pending',
