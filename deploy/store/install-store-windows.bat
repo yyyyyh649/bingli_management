@@ -60,10 +60,20 @@ if "!STORE_ID!"=="" (
   pause
   exit /b 1
 )
-REM 输入清洗：仅允许中文、英文字母、数字、下划线、连字符；含其他字符直接报错
-echo !STORE_ID!| findstr /r "^[\u4e00-\u9fa5a-zA-Z0-9_-]\+$" >nul 2>&1
-if %errorlevel% neq 0 (
-  echo [错误] STORE_ID 只能包含中文、英文字母、数字、下划线、连字符
+REM 输入清洗：禁止空格和文件系统危险字符（<>:"/\|?*）
+set "BAD=0"
+echo !STORE_ID!| findstr /c:" " >nul 2>&1 && set "BAD=1"
+echo !STORE_ID!| findstr /c:"<" >nul 2>&1 && set "BAD=1"
+echo !STORE_ID!| findstr /c:">" >nul 2>&1 && set "BAD=1"
+echo !STORE_ID!| findstr /c:":" >nul 2>&1 && set "BAD=1"
+echo !STORE_ID!| findstr /c:"\"" >nul 2>&1 && set "BAD=1"
+echo !STORE_ID!| findstr /c:"/" >nul 2>&1 && set "BAD=1"
+echo !STORE_ID!| findstr /c:"\\" >nul 2>&1 && set "BAD=1"
+echo !STORE_ID!| findstr /c:"|" >nul 2>&1 && set "BAD=1"
+echo !STORE_ID!| findstr /c:"?" >nul 2>&1 && set "BAD=1"
+echo !STORE_ID!| findstr /c:"*" >nul 2>&1 && set "BAD=1"
+if "!BAD!"=="1" (
+  echo [错误] STORE_ID 不能包含空格或字符 ^< ^> : " / \ ^| ? *
   pause
   exit /b 1
 )
