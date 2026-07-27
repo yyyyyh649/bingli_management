@@ -1,6 +1,7 @@
 import React from 'react';
 import { Form, Input, InputNumber, DatePicker } from 'antd';
 import dayjs from 'dayjs';
+import PhoneInput, { phoneValidator } from '../../components/PhoneInput.jsx';
 
 // 验光单向导 - 第1步：基本信息
 // 表单实例由父级 Wizard 传入
@@ -24,11 +25,12 @@ export default function Page1Basic({ form }) {
       <Form.Item
         label="电话"
         name="phone"
+        hasFeedback
         rules={[
-          { pattern: /^1\d{10}$/, message: '手机号需为 11 位数字', validateTrigger: 'onBlur' },
+          { validator: phoneValidator, validateTrigger: 'onChange' },
         ]}
       >
-        <Input placeholder="11 位手机号（选填，但归属本人积分时必填）" maxLength={11} />
+        <PhoneInput placeholder="11 位手机号（选填，但归属本人积分时必填）" />
       </Form.Item>
       <Form.Item
         label="登记日期"

@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { createCase } from '../../api/cases.js';
 import { useOperators } from '../../api/operators.js';
 import { CASE_MODE } from '@optical/shared/constants.js';
+import PhoneInput, { phoneValidator } from '../../components/PhoneInput.jsx';
 
 export default function CaseSimpleForm() {
   const [form] = Form.useForm();
@@ -71,11 +72,12 @@ export default function CaseSimpleForm() {
         <Form.Item
           label="手机号"
           name="phone"
+          hasFeedback
           rules={[
-            { pattern: /^1\d{10}$/, message: '手机号需为 11 位数字', validateTrigger: 'onBlur' },
+            { validator: phoneValidator, validateTrigger: 'onChange' },
           ]}
         >
-          <Input placeholder="选填，11 位手机号" maxLength={11} />
+          <PhoneInput placeholder="选填，11 位手机号" />
         </Form.Item>
         <Form.Item label="住址" name="address">
           <Input.TextArea rows={2} placeholder="选填" />

@@ -22,6 +22,7 @@ import {
 } from '@optical/shared/questionnaire.js';
 import { CASE_MODE } from '@optical/shared/constants.js';
 import SurgeryModule from '../../components/SurgeryModule.jsx';
+import PhoneInput, { phoneStatus, phoneHelp } from '../../components/PhoneInput.jsx';
 
 const { Text, Title } = Typography;
 
@@ -218,21 +219,13 @@ export default function CaseComplexForm() {
                 <Form.Item
                   label="手机号"
                   required
-                  validateStatus={
-                    !basic.customer_phone ? ''
-                    : /^1\d{10}$/.test(basic.customer_phone) ? 'success'
-                    : 'error'
-                  }
-                  help={
-                    !basic.customer_phone ? ''
-                    : /^1\d{10}$/.test(basic.customer_phone) ? ''
-                    : '手机号需为 11 位数字'
-                  }
+                  hasFeedback
+                  validateStatus={phoneStatus(basic.customer_phone)}
+                  help={phoneHelp(basic.customer_phone)}
                 >
-                  <Input
+                  <PhoneInput
                     value={basic.customer_phone}
                     onChange={(e) => setBasic({ ...basic, customer_phone: e.target.value })}
-                    maxLength={11}
                     placeholder="11 位手机号"
                   />
                 </Form.Item>

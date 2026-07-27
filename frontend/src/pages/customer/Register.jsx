@@ -3,6 +3,7 @@ import { Card, Form, Input, Button, Modal, Space, Select } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import { createCustomer } from '../../api/customers.js';
 import { useOperators } from '../../api/operators.js';
+import PhoneInput, { phoneValidator } from '../../components/PhoneInput.jsx';
 
 export default function CustomerRegister() {
   const [form] = Form.useForm();
@@ -49,12 +50,13 @@ export default function CustomerRegister() {
         <Form.Item
           label="手机号"
           name="phone"
+          hasFeedback
           rules={[
             { required: true, message: '请输入手机号' },
-            { pattern: /^1\d{10}$/, message: '手机号需为 11 位数字' },
+            { validator: phoneValidator, validateTrigger: 'onChange' },
           ]}
         >
-          <Input placeholder="11 位手机号" maxLength={11} />
+          <PhoneInput placeholder="11 位手机号" />
         </Form.Item>
         <Form.Item label="会员卡号（可选）" name="memberCardNo">
           <Input placeholder="选填" />
