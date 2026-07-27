@@ -64,6 +64,25 @@ if ! id -u "$RUN_USER" &>/dev/null; then
   useradd --system --no-create-home --shell /usr/sbin/nologin "$RUN_USER"
 fi
 
+# ---------- 3.5 放行 80/443 端口（Oracle Ubuntu 镜像 iptables 坑） ----------
+# Oracle Ubuntu 镜像默认在 INPUT 链第 5 条有 REJECT 规则，新规则必须插在它前面
+if command -v iptables &>/dev/null; then
+  REJECT_LINE=$(sudo iptables -L INPUT -n --line-numbers | awk '/REJECT/{print $1; exit}')
+  if [[ -n "$REJECT_LINE" ]]; then
+    for PORT in 80 443; do
+      # 已存在则跳过
+      if ! iptables -C INPUT -m state --state NEW -p tcp --dport "$PORT" -j ACCEPT 2>/dev/null; then
+        iptables -I INPUT "$REJECT_LINE" -m state --state NEW -p tcp --dport "$PORT" -j ACCEPT
+        info "已放行 iptables 端口 $PORT（插入到 REJECT 之前）"
+      fi
+    done
+    # 持久化
+    if command -v netfilter-persistent &>/dev/null; then
+      netfilter-persistent save
+    fi
+  fi
+fi
+
 # ---------- 4. 部署代码 ----------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
