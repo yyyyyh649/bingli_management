@@ -1,5 +1,10 @@
 import client from './client.js';
 
+// 列出全部客户（按创建时间倒序，最多 500 条）
+export function listCustomers() {
+  return client.get('/customers');
+}
+
 // 模糊查询（手机号后4位/完整手机号/姓名/会员卡号）
 export function searchCustomers(q) {
   return client.get('/customers/search', { params: { q } });

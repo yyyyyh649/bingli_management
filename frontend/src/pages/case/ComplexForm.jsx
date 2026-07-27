@@ -215,8 +215,26 @@ export default function CaseComplexForm() {
                 </Form.Item>
               </Col>
               <Col span={6}>
-                <Form.Item label="手机号" required>
-                  <Input value={basic.customer_phone} onChange={(e) => setBasic({ ...basic, customer_phone: e.target.value })} />
+                <Form.Item
+                  label="手机号"
+                  required
+                  validateStatus={
+                    !basic.customer_phone ? ''
+                    : /^1\d{10}$/.test(basic.customer_phone) ? 'success'
+                    : 'error'
+                  }
+                  help={
+                    !basic.customer_phone ? ''
+                    : /^1\d{10}$/.test(basic.customer_phone) ? ''
+                    : '手机号需为 11 位数字'
+                  }
+                >
+                  <Input
+                    value={basic.customer_phone}
+                    onChange={(e) => setBasic({ ...basic, customer_phone: e.target.value })}
+                    maxLength={11}
+                    placeholder="11 位手机号"
+                  />
                 </Form.Item>
               </Col>
               <Col span={6}>

@@ -15,6 +15,15 @@ function validatePhone(phone) {
   return /^1\d{10}$/.test(String(phone).trim());
 }
 
+// 列出全部客户（按创建时间倒序，最多 500 条）
+router.get('/', (req, res) => {
+  const db = getDb();
+  const rows = db
+    .prepare('SELECT * FROM customers ORDER BY created_at DESC LIMIT 500')
+    .all();
+  res.json(ok(rows));
+});
+
 // 模糊查询（手机号后4位 / 完整手机号 / 姓名 / 会员卡号）
 router.get('/search', (req, res) => {
   const q = (req.query.q || '').toString().trim();

@@ -1,24 +1,40 @@
-import React, { useState } from 'react';
-import { Card, Input, Button, Table, Tag, Space, Empty, message } from 'antd';
+import React, { useState, useEffect } from 'react';
+import { Card, Input, Button, Table, Tag, Space, Empty } from 'antd';
 import { SearchOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import { searchCustomers } from '../../api/customers.js';
+import { searchCustomers, listCustomers } from '../../api/customers.js';
 
 export default function CustomerSearch() {
   const navigate = useNavigate();
   const [keyword, setKeyword] = useState('');
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [searched, setSearched] = useState(false);
+
+  // 进入页面默认加载全部客户
+  const loadAll = async () => {
+    setLoading(true);
+    try {
+      const list = await listCustomers();
+      setResults(Array.isArray(list) ? list : []);
+    } catch (e) {
+      setResults([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadAll();
+  }, []);
 
   const doSearch = async () => {
     const q = keyword.trim();
     if (!q) {
-      message.warning('请输入查询关键字');
+      // 关键字为空时回到"显示全部"
+      loadAll();
       return;
     }
     setLoading(true);
-    setSearched(true);
     try {
       const list = await searchCustomers(q);
       setResults(Array.isArray(list) ? list : []);
@@ -67,7 +83,7 @@ export default function CustomerSearch() {
     <Card title="客户查询">
       <Space style={{ marginBottom: 16, width: '100%' }} direction="vertical">
         <div style={{ color: '#888', fontSize: 12 }}>
-          支持按 手机号后4位 / 完整手机号 / 姓名 / 会员卡号 查询，系统自动判断
+          支持按 手机号后4位 / 完整手机号 / 姓名 / 会员卡号 查询，系统自动判断。关键字为空时显示全部客户。
         </div>
         <Space.Compact style={{ width: '100%', maxWidth: 600 }}>
           <Input
@@ -83,7 +99,7 @@ export default function CustomerSearch() {
         </Space.Compact>
       </Space>
 
-      {searched && !loading && results.length === 0 ? (
+      {!loading && results.length === 0 ? (
         <Empty description="未找到匹配客户" />
       ) : (
         <Table
