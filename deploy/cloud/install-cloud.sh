@@ -68,6 +68,13 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
+# 确保 rsync 可用（Oracle Ubuntu 精简镜像默认未装）
+if ! command -v rsync &>/dev/null; then
+  info "安装 rsync"
+  apt-get update -qq
+  apt-get install -y rsync
+fi
+
 info "部署代码到 $INSTALL_DIR"
 mkdir -p "$INSTALL_DIR"
 # 若是首次部署，从当前脚本所在项目拷贝；若是更新，先备份
