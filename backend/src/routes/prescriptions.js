@@ -7,6 +7,7 @@ import { recordChange, withChangeTx } from '../lib/outbox.js';
 import { nowISO, todayDate, POINTS_SOURCE } from '@optical/shared/constants.js';
 import { checkDeletePassword } from '../lib/password.js';
 import { findDuplicatePoints } from '../lib/duplicate.js';
+import { ensureCustomer } from '../lib/customer.js';
 import { triggerPointsImmediatePush } from '../sync/index.js';
 
 const router = Router();
@@ -88,6 +89,22 @@ router.post(
     let pointsRow = null;
 
     withChangeTx(db, () => {
+      // 自动为客户建 stub 档案：
+      //   - page1.phone（验光单本人）：若不存在则建
+      //   - pointsTargetPhone（积分归属手机号，可能是朋友/家人）：若不存在则建
+      //   - 两者可能不同，需分别 ensure
+      if (phone) {
+        ensureCustomer(db, {
+          phone,
+          name: String(page1.name || '').trim(),
+          address: String(page1.address || '').trim(),
+          operator: String(operator || ''),
+        });
+      }
+      if (targetPhone && targetPhone !== phone) {
+        ensureCustomer(db, { phone: targetPhone, operator: String(operator || '') });
+      }
+
       db.prepare(
         `INSERT INTO prescriptions (id, customer_phone, customer_name, page1, od_ds, od_dc, os_ds, os_dc, page6, points_target_phone, points_amount, record_date, store, operator, created_at, updated_at, sync_status)
          VALUES (@id, @customer_phone, @customer_name, @page1, @od_ds, @od_dc, @os_ds, @os_dc, @page6, @points_target_phone, @points_amount, @record_date, @store, @operator, @created_at, @updated_at, @sync_status)`

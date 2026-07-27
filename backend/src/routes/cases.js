@@ -6,6 +6,7 @@ import { getDb } from '../db.js';
 import { recordChange, withChangeTx } from '../lib/outbox.js';
 import { nowISO, CASE_MODE, todayDate } from '@optical/shared/constants.js';
 import { checkDeletePassword } from '../lib/password.js';
+import { ensureCustomer } from '../lib/customer.js';
 
 const router = Router();
 
@@ -67,6 +68,15 @@ router.post(
     };
 
     withChangeTx(db, () => {
+      // 若手机号非空且客户表里没有，自动建 stub 客户档案（保证先登记病例也能查到该客户）
+      if (cleanPhone) {
+        ensureCustomer(db, {
+          phone: cleanPhone,
+          name: row.customer_name,
+          address: row.customer_address,
+          operator: row.operator,
+        });
+      }
       db.prepare(
         `INSERT INTO cases (id, mode, customer_name, customer_phone, customer_gender, customer_address, condition, answers, record_date, store, operator, created_at, updated_at, sync_status)
          VALUES (@id, @mode, @customer_name, @customer_phone, @customer_gender, @customer_address, @condition, @answers, @record_date, @store, @operator, @created_at, @updated_at, @sync_status)`
