@@ -18,12 +18,12 @@ import {
   Select,
   message,
 } from 'antd';
-import { EditOutlined, WalletOutlined } from '@ant-design/icons';
+import { EditOutlined, WalletOutlined, BellOutlined } from '@ant-design/icons';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getCustomerProfile } from '../../api/customers.js';
+import { getCustomerProfile, updateCustomerReview } from '../../api/customers.js';
 import { createBalance } from '../../api/balance.js';
 import { useOperators } from '../../api/operators.js';
-import { BALANCE_SOURCE } from '@optical/shared/constants.js';
+import { BALANCE_SOURCE, DEFAULT_REVIEW_CYCLE_DAYS, REVIEW_CONTACT_STATUS, REVIEW_CONTACT_STATUS_LABELS } from '@optical/shared/constants.js';
 import PointsLedgerTable from '../../components/PointsLedgerTable.jsx';
 import BalanceLedgerTable from '../../components/BalanceLedgerTable.jsx';
 import CaseDetail from '../../components/CaseDetail.jsx';
@@ -39,6 +39,9 @@ export default function CustomerProfile() {
   const [balanceType, setBalanceType] = useState('topup'); // 'topup' | 'deduct'
   const [balanceSubmitting, setBalanceSubmitting] = useState(false);
   const [balanceForm] = Form.useForm();
+  const [reviewModalOpen, setReviewModalOpen] = useState(false);
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [reviewForm] = Form.useForm();
   const { operators } = useOperators();
 
   const load = async () => {
@@ -101,6 +104,33 @@ export default function CustomerProfile() {
     }
   };
 
+  const openReviewModal = () => {
+    const cycle = Number(customer?.review_cycle_days || DEFAULT_REVIEW_CYCLE_DAYS);
+    const status = customer?.review_contact_status || REVIEW_CONTACT_STATUS.PENDING;
+    const note = customer?.review_contact_note || '';
+    reviewForm.setFieldsValue({ reviewCycleDays: cycle, reviewContactStatus: status, reviewContactNote: note });
+    setReviewModalOpen(true);
+  };
+
+  const handleReviewSubmit = async () => {
+    try {
+      const values = await reviewForm.validateFields();
+      setReviewSubmitting(true);
+      await updateCustomerReview(customer.id, {
+        reviewCycleDays: Number(values.reviewCycleDays),
+        reviewContactStatus: values.reviewContactStatus,
+        reviewContactNote: values.reviewContactNote || '',
+      });
+      message.success('复查设置已更新');
+      setReviewModalOpen(false);
+      await load();
+    } catch (e) {
+      // 校验失败或 API 错误
+    } finally {
+      setReviewSubmitting(false);
+    }
+  };
+
   if (loading) {
     return (
       <div style={{ textAlign: 'center', padding: 60 }}>
@@ -145,6 +175,12 @@ export default function CustomerProfile() {
             >
               手动加减积分
             </Button>
+            <Button
+              icon={<BellOutlined />}
+              onClick={openReviewModal}
+            >
+              复查设置
+            </Button>
           </Space>
         }
       >
@@ -161,6 +197,14 @@ export default function CustomerProfile() {
           </Descriptions.Item>
           <Descriptions.Item label="创建门店">{customer.store || '-'}</Descriptions.Item>
           <Descriptions.Item label="登记人">{customer.operator || '-'}</Descriptions.Item>
+          <Descriptions.Item label="复查周期">
+            {Number(customer.review_cycle_days || DEFAULT_REVIEW_CYCLE_DAYS)} 天
+          </Descriptions.Item>
+          <Descriptions.Item label="复查联系状态">
+            <Tag color={(customer.review_contact_status || 'pending') === 'pending' ? 'red' : (customer.review_contact_status === 'contacted' ? 'orange' : 'green')}>
+              {REVIEW_CONTACT_STATUS_LABELS[customer.review_contact_status] || REVIEW_CONTACT_STATUS_LABELS.pending}
+            </Tag>
+          </Descriptions.Item>
         </Descriptions>
       </Card>
 
@@ -294,6 +338,44 @@ export default function CustomerProfile() {
           </Form.Item>
           <Form.Item label="备注（可选）" name="note">
             <Input.TextArea rows={2} placeholder="选填" />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* 复查设置 Modal */}
+      <Modal
+        open={reviewModalOpen}
+        title="复查设置"
+        okText="保存"
+        cancelText="取消"
+        onOk={handleReviewSubmit}
+        onCancel={() => setReviewModalOpen(false)}
+        confirmLoading={reviewSubmitting}
+        destroyOnClose
+      >
+        <div style={{ marginBottom: 16, color: '#888' }}>
+          客户：{customer.name || '-'}（{customer.phone || phone}）
+        </div>
+        <Form form={reviewForm} layout="vertical">
+          <Form.Item
+            label="复查周期（天）"
+            name="reviewCycleDays"
+            rules={[{ required: true, message: '请输入复查周期' }]}
+            extra={`默认 ${DEFAULT_REVIEW_CYCLE_DAYS} 天（3 个月）`}
+          >
+            <InputNumber min={1} step={1} precision={0} style={{ width: '100%' }} placeholder="复查周期天数" />
+          </Form.Item>
+          <Form.Item label="联系状态" name="reviewContactStatus">
+            <Select
+              options={[
+                { value: REVIEW_CONTACT_STATUS.PENDING, label: REVIEW_CONTACT_STATUS_LABELS.pending },
+                { value: REVIEW_CONTACT_STATUS.CONTACTED, label: REVIEW_CONTACT_STATUS_LABELS.contacted },
+                { value: REVIEW_CONTACT_STATUS.VISITED, label: REVIEW_CONTACT_STATUS_LABELS.visited },
+              ]}
+            />
+          </Form.Item>
+          <Form.Item label="联系备注" name="reviewContactNote">
+            <Input.TextArea rows={2} placeholder="选填，如：已电话通知、客户答应下周来等" />
           </Form.Item>
         </Form>
       </Modal>

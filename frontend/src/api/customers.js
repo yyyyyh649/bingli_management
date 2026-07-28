@@ -42,3 +42,17 @@ export function deleteCustomer(id, password) {
 export function getCustomerProfile(phone) {
   return client.get(`/customers/${phone}/profile`);
 }
+
+// 复查提醒：分开返回 配镜部/眼科部 到期未复查客户
+export function getReviewReminders() {
+  return client.get('/customers/review-reminders');
+}
+
+// 更新客户复查信息（周期/联系状态/备注）
+export function updateCustomerReview(id, { reviewCycleDays, reviewContactStatus, reviewContactNote }) {
+  const body = {};
+  if (reviewCycleDays !== undefined) body.reviewCycleDays = reviewCycleDays;
+  if (reviewContactStatus !== undefined) body.reviewContactStatus = reviewContactStatus;
+  if (reviewContactNote !== undefined) body.reviewContactNote = reviewContactNote;
+  return client.patch(`/customers/${id}/review`, body);
+}

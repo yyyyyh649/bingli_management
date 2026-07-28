@@ -40,6 +40,11 @@ export function initDb(opts = {}) {
     'ALTER TABLE prescriptions ADD COLUMN points_deduction_amount REAL DEFAULT 0',
     'ALTER TABLE prescriptions ADD COLUMN paid_amount REAL DEFAULT 0',
     'ALTER TABLE prescriptions ADD COLUMN points_earned INTEGER DEFAULT 0',
+    // 复查提醒相关字段
+    'ALTER TABLE customers ADD COLUMN review_cycle_days INTEGER DEFAULT 90',
+    'ALTER TABLE customers ADD COLUMN review_contact_status TEXT DEFAULT "pending"',
+    'ALTER TABLE customers ADD COLUMN review_contact_note TEXT DEFAULT ""',
+    'ALTER TABLE customers ADD COLUMN review_contact_updated_at TEXT DEFAULT ""',
   ];
   for (const sql of migrations) {
     try { db.exec(sql); } catch { /* 列已存在，忽略 */ }

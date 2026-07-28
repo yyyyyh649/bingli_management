@@ -20,6 +20,77 @@ router.get('/delete-logs', (req, res) => {
   res.json(ok(rows));
 });
 
+// 配镜部绩效统计：年度按月营业额 + 当前月汇总 + 按登记人明细
+// 营业额 = prescriptions.paid_amount（按 record_date 年月分组）
+router.get('/performance', (req, res) => {
+  const db = getDb();
+  const year = Number(req.query.year) || new Date().getFullYear();
+  const currentMonth = new Date().getMonth() + 1; // 1-12
+
+  // 年度按月营业额（1~12 月）
+  const monthlyRows = db
+    .prepare(
+      `SELECT CAST(strftime('%m', record_date) AS INTEGER) AS month,
+              COUNT(*) AS cnt,
+              COALESCE(SUM(paid_amount), 0) AS revenue,
+              COALESCE(SUM(original_amount), 0) AS original,
+              COALESCE(SUM(discounted_amount - paid_amount), 0) AS deduction
+       FROM prescriptions
+       WHERE strftime('%Y', record_date) = ?
+         AND paid_amount IS NOT NULL
+       GROUP BY month`
+    )
+    .all(String(year));
+  const monthlyRevenue = Array.from({ length: 12 }, (_, i) => {
+    const m = i + 1;
+    const found = monthlyRows.find((r) => r.month === m);
+    return {
+      month: m,
+      label: `${m}月`,
+      count: found?.cnt || 0,
+      revenue: Number(found?.revenue || 0),
+      original: Number(found?.original || 0),
+      deduction: Number(found?.deduction || 0),
+    };
+  });
+
+  const yearTotal = monthlyRevenue.reduce((s, r) => s + r.revenue, 0);
+  const yearCount = monthlyRevenue.reduce((s, r) => s + r.count, 0);
+  const currentMonthData = monthlyRevenue.find((r) => r.month === currentMonth) || monthlyRevenue[0];
+
+  // 按登记人绩效（本年）
+  const operatorRows = db
+    .prepare(
+      `SELECT operator,
+              COUNT(*) AS cnt,
+              COALESCE(SUM(paid_amount), 0) AS revenue
+       FROM prescriptions
+       WHERE strftime('%Y', record_date) = ?
+         AND paid_amount IS NOT NULL
+       GROUP BY operator
+       ORDER BY revenue DESC`
+    )
+    .all(String(year))
+    .map((r) => ({
+      operator: r.operator || '（未指定）',
+      count: r.cnt,
+      revenue: Number(r.revenue),
+    }));
+
+  res.json(
+    ok({
+      year,
+      currentMonth,
+      monthlyRevenue,
+      yearTotal: Number(yearTotal.toFixed(2)),
+      yearCount,
+      currentMonthTotal: Number((currentMonthData?.revenue || 0).toFixed(2)),
+      currentMonthCount: currentMonthData?.count || 0,
+      operatorBreakdown: operatorRows,
+    })
+  );
+});
+
 // 解析 JSON 字段（容错）
 function safeParse(s, fallback) {
   if (s == null) return fallback;

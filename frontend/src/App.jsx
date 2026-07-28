@@ -23,6 +23,7 @@ import AdminPoints from './pages/admin/PointsManual.jsx';
 import AdminDelete from './pages/admin/DeleteRecords.jsx';
 import AdminOperators from './pages/admin/Operators.jsx';
 import AdminExport from './pages/admin/Export.jsx';
+import AdminPerformance from './pages/admin/Performance.jsx';
 import NotFound from './pages/NotFound.jsx';
 
 const { Header, Content } = Layout;
@@ -126,6 +127,7 @@ export default function App() {
             <Route path="points" element={<AdminPoints />} />
             <Route path="delete" element={<AdminDelete />} />
             <Route path="operators" element={<AdminOperators />} />
+            <Route path="performance" element={<AdminPerformance />} />
             <Route path="export" element={<AdminExport />} />
           </Route>
           <Route path="*" element={<NotFound />} />

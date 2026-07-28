@@ -5,6 +5,7 @@ import { ok, asyncHandler, ApiError } from '../lib/response.js';
 import { getDb } from '../db.js';
 import { recordChange, withChangeTx } from '../lib/outbox.js';
 import { nowISO } from '@optical/shared/constants.js';
+import { REVIEW_CONTACT_STATUS, DEFAULT_REVIEW_CYCLE_DAYS } from '@optical/shared/constants.js';
 import { checkDeletePassword } from '../lib/password.js';
 
 const router = Router();
@@ -14,6 +15,8 @@ function validatePhone(phone) {
   if (!phone) return false;
   return /^1\d{10}$/.test(String(phone).trim());
 }
+
+const VALID_CONTACT_STATUS = new Set(Object.values(REVIEW_CONTACT_STATUS));
 
 // 列出全部客户（按创建时间倒序，最多 500 条）
 router.get('/', (req, res) => {
@@ -48,6 +51,93 @@ router.get('/search', (req, res) => {
   }
   res.json(ok(rows));
 });
+
+// 复查提醒：分开返回 配镜部(验光单) / 眼科部(病例) 到期未复查客户
+// 规则：最近一次记录日期 + review_cycle_days < 今天 → 需复查
+router.get('/review-reminders', (req, res) => {
+  const db = getDb();
+  const today = new Date().toISOString().slice(0, 10);
+
+  // 配镜部：基于最近一次验光单
+  const optical = db
+    .prepare(
+      `SELECT c.*, MAX(p.record_date) AS last_record_date,
+              date(MAX(p.record_date), '+' || COALESCE(c.review_cycle_days, ${DEFAULT_REVIEW_CYCLE_DAYS}) || ' days') AS due_date
+       FROM customers c
+       JOIN prescriptions p ON p.customer_phone = c.phone
+       GROUP BY c.id
+       HAVING due_date IS NOT NULL AND due_date < date(?)`
+    )
+    .all(today)
+    .map((r) => {
+      const cycle = Number(r.review_cycle_days || DEFAULT_REVIEW_CYCLE_DAYS);
+      return {
+        ...r,
+        review_cycle_days: cycle,
+        overdue_days: Math.floor((Date.parse(today) - Date.parse(r.due_date)) / 86400000),
+      };
+    });
+
+  // 眼科部：基于最近一次病例
+  const ophthalmology = db
+    .prepare(
+      `SELECT c.*, MAX(cs.record_date) AS last_record_date,
+              date(MAX(cs.record_date), '+' || COALESCE(c.review_cycle_days, ${DEFAULT_REVIEW_CYCLE_DAYS}) || ' days') AS due_date
+       FROM customers c
+       JOIN cases cs ON cs.customer_phone = c.phone
+       GROUP BY c.id
+       HAVING due_date IS NOT NULL AND due_date < date(?)`
+    )
+    .all(today)
+    .map((r) => {
+      const cycle = Number(r.review_cycle_days || DEFAULT_REVIEW_CYCLE_DAYS);
+      return {
+        ...r,
+        review_cycle_days: cycle,
+        overdue_days: Math.floor((Date.parse(today) - Date.parse(r.due_date)) / 86400000),
+      };
+    });
+
+  res.json(ok({ optical, ophthalmology, today }));
+});
+
+// 更新客户复查信息（周期/联系状态/备注）
+router.patch(
+  '/:id/review',
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { reviewCycleDays, reviewContactStatus, reviewContactNote } = req.body || {};
+    const db = getDb();
+    const existing = db.prepare('SELECT * FROM customers WHERE id = ?').get(id);
+    if (!existing) throw new ApiError('客户不存在', 404);
+
+    const next = { ...existing };
+    if (reviewCycleDays !== undefined) {
+      const n = Number(reviewCycleDays);
+      if (!Number.isFinite(n) || n <= 0) throw new ApiError('复查周期必须为正整数（天）');
+      next.review_cycle_days = Math.floor(n);
+    }
+    if (reviewContactStatus !== undefined) {
+      const s = String(reviewContactStatus);
+      if (!VALID_CONTACT_STATUS.has(s)) throw new ApiError('联系状态不合法');
+      next.review_contact_status = s;
+    }
+    if (reviewContactNote !== undefined) {
+      next.review_contact_note = String(reviewContactNote || '');
+    }
+    next.review_contact_updated_at = nowISO();
+    next.updated_at = nowISO();
+    next.sync_status = 'pending';
+
+    withChangeTx(db, () => {
+      db.prepare(
+        `UPDATE customers SET review_cycle_days = ?, review_contact_status = ?, review_contact_note = ?, review_contact_updated_at = ?, updated_at = ?, sync_status = ? WHERE id = ?`
+      ).run(next.review_cycle_days, next.review_contact_status, next.review_contact_note, next.review_contact_updated_at, next.updated_at, 'pending', id);
+      recordChange(db, { tableName: 'customers', recordId: id, operation: 'upsert', payload: next });
+    });
+    res.json(ok(next));
+  })
+);
 
 // 精确按手机号查
 router.get('/by-phone/:phone', (req, res) => {

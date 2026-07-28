@@ -6,6 +6,7 @@ import {
   DeleteOutlined,
   TeamOutlined,
   DownloadOutlined,
+  BarChartOutlined,
 } from '@ant-design/icons';
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
 
@@ -31,6 +32,11 @@ const menuItems = [
     key: '/admin/export',
     icon: <DownloadOutlined />,
     label: <Link to="/admin/export">数据导出</Link>,
+  },
+  {
+    key: '/admin/performance',
+    icon: <BarChartOutlined />,
+    label: <Link to="/admin/performance">配镜部绩效</Link>,
   },
 ];
 

@@ -26,6 +26,10 @@ CREATE TABLE IF NOT EXISTS customers (
   store           TEXT NOT NULL,
   operator        TEXT DEFAULT '',
   balance         REAL NOT NULL DEFAULT 0,
+  review_cycle_days        INTEGER NOT NULL DEFAULT 90,  -- 复查周期（天），默认3个月
+  review_contact_status    TEXT NOT NULL DEFAULT 'pending', -- 待联系/已联系/已到店
+  review_contact_note      TEXT NOT NULL DEFAULT '',
+  review_contact_updated_at TEXT NOT NULL DEFAULT '',
   created_at      TEXT NOT NULL,
   updated_at      TEXT NOT NULL,
   sync_status     TEXT NOT NULL DEFAULT 'pending'

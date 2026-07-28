@@ -8,7 +8,9 @@ import { SYNC_TABLES, nowISO } from '@optical/shared/constants.js';
 const TABLE_FIELDS = {
   customers: [
     'id', 'phone', 'name', 'member_card_no', 'address',
-    'store', 'operator', 'balance', 'created_at', 'updated_at', 'sync_status',
+    'store', 'operator', 'balance',
+    'review_cycle_days', 'review_contact_status', 'review_contact_note', 'review_contact_updated_at',
+    'created_at', 'updated_at', 'sync_status',
   ],
   points_ledger: [
     'id', 'customer_phone', 'amount', 'source_type',

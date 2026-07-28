@@ -43,6 +43,22 @@ export const POINTS_TO_YUAN_RATE = 100;
 // 积分扣除原因（扣分时必选，仅这两项，扩展需需求方确认）
 export const POINTS_DEDUCT_REASONS = ['提现', '兑换小礼品'];
 
+// 复查提醒：默认周期（天），可在客户详情覆盖
+export const DEFAULT_REVIEW_CYCLE_DAYS = 90;
+
+// 复查联系状态
+export const REVIEW_CONTACT_STATUS = {
+  PENDING: 'pending',       // 待联系
+  CONTACTED: 'contacted',   // 已联系
+  VISITED: 'visited',       // 已到店复查
+};
+
+export const REVIEW_CONTACT_STATUS_LABELS = {
+  pending: '待联系',
+  contacted: '已联系',
+  visited: '已到店',
+};
+
 // 业务表名（同步白名单）
 export const SYNC_TABLES = [
   'customers',
