@@ -4,7 +4,7 @@ import dayjs from 'dayjs';
 import { useNavigate } from 'react-router-dom';
 import { createCase } from '../../api/cases.js';
 import { useOperators } from '../../api/operators.js';
-import { CASE_MODE } from '@optical/shared/constants.js';
+import { CASE_MODE, DEPARTMENT } from '@optical/shared/constants.js';
 import PhoneInput, { phoneValidator } from '../../components/PhoneInput.jsx';
 
 export default function CaseSimpleForm() {
@@ -12,6 +12,12 @@ export default function CaseSimpleForm() {
   const navigate = useNavigate();
   const { operators, loading: opLoading } = useOperators();
   const [submitting, setSubmitting] = useState(false);
+
+  // 只显示眼科部的登记人
+  const ophthalmologyOperators = operators.filter((op) => {
+    const depts = (op.department || '').split(',').filter(Boolean);
+    return depts.includes(DEPARTMENT.OPHTHALMOLOGY);
+  });
 
   const onFinish = async (values) => {
     setSubmitting(true);
@@ -86,8 +92,8 @@ export default function CaseSimpleForm() {
           <Input.TextArea rows={4} placeholder="请描述病情" />
         </Form.Item>
         <Form.Item label="登记人" name="operator" rules={[{ required: true, message: '请选择登记人' }]}>
-          <Select placeholder={opLoading ? '加载中...' : '请选择登记人'} loading={opLoading} allowClear>
-            {operators.map((op) => (
+          <Select placeholder={opLoading ? '加载中...' : '请选择登记人（仅眼科部）'} loading={opLoading} allowClear>
+            {ophthalmologyOperators.map((op) => (
               <Select.Option key={op.id} value={op.name}>
                 {op.name}
               </Select.Option>

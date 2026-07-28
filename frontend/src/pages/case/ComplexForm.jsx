@@ -20,7 +20,7 @@ import {
   MODULE_NAMES, EYE_EXAM_ITEMS, DIAGNOSIS_OPTIONS, TREATMENT_OPTIONS,
   INITIAL_COMPLEX_ANSWERS,
 } from '@optical/shared/questionnaire.js';
-import { CASE_MODE } from '@optical/shared/constants.js';
+import { CASE_MODE, DEPARTMENT } from '@optical/shared/constants.js';
 import SurgeryModule from '../../components/SurgeryModule.jsx';
 import PhoneInput, { phoneStatus, phoneHelp } from '../../components/PhoneInput.jsx';
 
@@ -29,6 +29,12 @@ const { Text, Title } = Typography;
 export default function CaseComplexForm() {
   const navigate = useNavigate();
   const { operators, loading: opLoading } = useOperators();
+
+  // 只显示眼科部的登记人
+  const ophthalmologyOperators = operators.filter((op) => {
+    const depts = (op.department || '').split(',').filter(Boolean);
+    return depts.includes(DEPARTMENT.OPHTHALMOLOGY);
+  });
 
   // 7 模块步骤：0=基本信息+模块1问卷 ... 6=模块7手术相关
   const [step, setStep] = useState(0);
@@ -140,12 +146,13 @@ export default function CaseComplexForm() {
   const setSub = (key, val) => setAns((a) => ({ ...a, [key]: val }));
   const setSurgery = (key, val) => setAns((a) => ({ ...a, surgery: { ...a.surgery, [key]: val } }));
 
-  const basicOk = basic.customer_name && basic.customer_gender && basic.customer_phone && basic.customer_address;
+  const basicOk = basic.customer_name && basic.customer_gender && basic.customer_phone && basic.customer_address && basic.operator;
 
   // ===== 提交病例 =====
   const [submitting, setSubmitting] = useState(false);
   const save = async () => {
     if (!basic.customer_name) { message.warning('请填写患者姓名'); return; }
+    if (!basic.operator) { message.warning('请选择登记人'); return; }
     setSubmitting(true);
     try {
       await createCase({
@@ -243,9 +250,9 @@ export default function CaseComplexForm() {
                 </Form.Item>
               </Col>
               <Col span={6}>
-                <Form.Item label="登记人">
-                  <Select placeholder={opLoading ? '加载中...' : '请选择登记人'} value={basic.operator || undefined} onChange={(v) => setBasic({ ...basic, operator: v })} allowClear>
-                    {operators.map((op) => (<Select.Option key={op.id} value={op.name}>{op.name}</Select.Option>))}
+                <Form.Item label="登记人" required>
+                  <Select placeholder={opLoading ? '加载中...' : '请选择登记人（仅眼科部）'} value={basic.operator || undefined} onChange={(v) => setBasic({ ...basic, operator: v })} allowClear>
+                    {ophthalmologyOperators.map((op) => (<Select.Option key={op.id} value={op.name}>{op.name}</Select.Option>))}
                   </Select>
                 </Form.Item>
               </Col>
