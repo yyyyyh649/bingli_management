@@ -15,6 +15,7 @@ PRAGMA foreign_keys = ON;
 -- ----------------------------------------------------------------------------
 -- 4.2 客户/会员表
 -- phone 为全局唯一识别键；member_card_no 为空表示非会员
+-- balance 为缓存余额（由 balance_ledger 汇总，同步时跟随 ledger 一起走）
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS customers (
   id              TEXT PRIMARY KEY,
@@ -24,6 +25,7 @@ CREATE TABLE IF NOT EXISTS customers (
   address         TEXT DEFAULT '',
   store           TEXT NOT NULL,
   operator        TEXT DEFAULT '',
+  balance         REAL NOT NULL DEFAULT 0,
   created_at      TEXT NOT NULL,
   updated_at      TEXT NOT NULL,
   sync_status     TEXT NOT NULL DEFAULT 'pending'
@@ -50,6 +52,25 @@ CREATE TABLE IF NOT EXISTS points_ledger (
 );
 CREATE INDEX IF NOT EXISTS idx_points_customer_phone ON points_ledger(customer_phone);
 CREATE INDEX IF NOT EXISTS idx_points_created_at     ON points_ledger(created_at);
+
+-- ----------------------------------------------------------------------------
+-- 4.3b 余额明细表（只增不改的流水账，与积分明细对称）
+-- amount 正数=充值，负数=消费/扣减；source_type 见 constants.js
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS balance_ledger (
+  id                       TEXT PRIMARY KEY,
+  customer_phone           TEXT NOT NULL,
+  amount                   REAL NOT NULL,
+  source_type              TEXT NOT NULL,
+  related_prescription_id  TEXT DEFAULT NULL,
+  note                     TEXT DEFAULT '',
+  store                    TEXT NOT NULL,
+  operator                 TEXT DEFAULT '',
+  created_at               TEXT NOT NULL,
+  sync_status              TEXT NOT NULL DEFAULT 'pending'
+);
+CREATE INDEX IF NOT EXISTS idx_balance_customer_phone ON balance_ledger(customer_phone);
+CREATE INDEX IF NOT EXISTS idx_balance_created_at     ON balance_ledger(created_at);
 
 -- ----------------------------------------------------------------------------
 -- 4.4 病例表
@@ -91,6 +112,16 @@ CREATE TABLE IF NOT EXISTS prescriptions (
   page6               TEXT DEFAULT '{}',     -- JSON: {lens_price, frame_price, pd_near, pd_far}
   points_target_phone TEXT DEFAULT '',       -- 积分归属手机号
   points_amount       INTEGER DEFAULT 0,     -- 实际写入的积分（0 表示未生成积分）
+  -- 支付与抵扣字段
+  original_amount     REAL DEFAULT 0,        -- 原价 = 镜片价 + 镜架价
+  discount_type       TEXT DEFAULT '',       -- 'discount'(打折) / 'reduction'(立减) / ''
+  discount_value      REAL DEFAULT 0,        -- 打折: 折扣率如0.8; 立减: 金额
+  discounted_amount   REAL DEFAULT 0,        -- 折后价
+  balance_deduction   REAL DEFAULT 0,        -- 余额抵扣金额
+  points_deduction    INTEGER DEFAULT 0,     -- 积分抵扣消耗的积分数
+  points_deduction_amount REAL DEFAULT 0,    -- 积分抵扣金额 = points_deduction / 100
+  paid_amount         REAL DEFAULT 0,        -- 实付金额（最终）
+  points_earned       INTEGER DEFAULT 0,     -- 本次新增积分（实付金额取整，店员可改）
   record_date         TEXT NOT NULL,
   store               TEXT NOT NULL,
   operator            TEXT DEFAULT '',
@@ -108,6 +139,7 @@ CREATE TABLE IF NOT EXISTS operators (
   id          TEXT PRIMARY KEY,
   name        TEXT NOT NULL,
   store       TEXT NOT NULL,                 -- 该员工所属门店
+  department  TEXT DEFAULT '',               -- 部门，逗号分隔: 'optical'(配镜部) / 'ophthalmology'(眼科部) / 'optical,ophthalmology'
   sort_order  INTEGER NOT NULL DEFAULT 0,
   created_at  TEXT NOT NULL,
   updated_at  TEXT NOT NULL,

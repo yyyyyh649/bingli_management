@@ -68,6 +68,9 @@ router.get('/:phone/profile', (req, res) => {
   const points = db
     .prepare('SELECT * FROM points_ledger WHERE customer_phone = ? ORDER BY created_at ASC')
     .all(phone);
+  const balanceLedger = db
+    .prepare('SELECT * FROM balance_ledger WHERE customer_phone = ? ORDER BY created_at ASC')
+    .all(phone);
   const cases = db
     .prepare('SELECT * FROM cases WHERE customer_phone = ? ORDER BY record_date DESC, created_at DESC')
     .all(phone);
@@ -76,12 +79,15 @@ router.get('/:phone/profile', (req, res) => {
     .all(phone);
 
   const totalPoints = points.reduce((s, r) => s + Number(r.amount || 0), 0);
+  const totalBalance = balanceLedger.reduce((s, r) => s + Number(r.amount || 0), 0);
 
   res.json(
     ok({
       customer,
       totalPoints,
+      totalBalance,
       pointsLedger: points,
+      balanceLedger,
       cases,
       prescriptions,
     })
@@ -128,14 +134,15 @@ router.post(
       address: String(address || ''),
       store,
       operator: String(operator || ''),
+      balance: 0,
       created_at: now,
       updated_at: now,
       sync_status: 'pending',
     };
     withChangeTx(db, () => {
       db.prepare(
-        `INSERT INTO customers (id, phone, name, member_card_no, address, store, operator, created_at, updated_at, sync_status)
-         VALUES (@id, @phone, @name, @member_card_no, @address, @store, @operator, @created_at, @updated_at, @sync_status)`
+        `INSERT INTO customers (id, phone, name, member_card_no, address, store, operator, balance, created_at, updated_at, sync_status)
+         VALUES (@id, @phone, @name, @member_card_no, @address, @store, @operator, @balance, @created_at, @updated_at, @sync_status)`
       ).run(row);
       recordChange(db, { tableName: 'customers', recordId: id, operation: 'upsert', payload: row });
     });

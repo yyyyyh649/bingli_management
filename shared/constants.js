@@ -21,7 +21,24 @@ export const POINTS_SOURCE = {
   MANUAL_ADD: 'manual_add',       // 后台手动加分
   WITHDRAW: 'withdraw',           // 提现
   GIFT_REDEEM: 'gift_redeem',     // 兑换小礼品
+  CONSUME_DEDUCT: 'consume_deduct', // 验光单积分抵扣（扣减）
 };
+
+// 余额来源类型
+export const BALANCE_SOURCE = {
+  TOPUP: 'topup',                 // 充值
+  CONSUME: 'consume',             // 验光单消费抵扣
+  MANUAL_DEDUCT: 'manual_deduct', // 手动扣减（客户查询处）
+};
+
+// 部门
+export const DEPARTMENT = {
+  OPTICAL: 'optical',             // 配镜部
+  OPHTHALMOLOGY: 'ophthalmology', // 眼科部
+};
+
+// 积分抵扣比例：100积分 = 1元
+export const POINTS_TO_YUAN_RATE = 100;
 
 // 积分扣除原因（扣分时必选，仅这两项，扩展需需求方确认）
 export const POINTS_DEDUCT_REASONS = ['提现', '兑换小礼品'];
@@ -30,6 +47,7 @@ export const POINTS_DEDUCT_REASONS = ['提现', '兑换小礼品'];
 export const SYNC_TABLES = [
   'customers',
   'points_ledger',
+  'balance_ledger',
   'cases',
   'prescriptions',
   'operators',

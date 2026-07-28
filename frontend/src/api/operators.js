@@ -5,12 +5,18 @@ export function listOperators() {
   return client.get('/operators'); // → data: operators[]
 }
 
-export function createOperator({ name, sortOrder }) {
-  return client.post('/operators', { name, sortOrder });
+export function createOperator({ name, sortOrder, department }) {
+  const body = { name, sortOrder };
+  if (department !== undefined) body.department = department;
+  return client.post('/operators', body);
 }
 
-export function updateOperator(id, { name, sortOrder }) {
-  return client.put(`/operators/${id}`, { name, sortOrder });
+export function updateOperator(id, { name, sortOrder, department }) {
+  const body = {};
+  if (name !== undefined) body.name = name;
+  if (sortOrder !== undefined) body.sortOrder = sortOrder;
+  if (department !== undefined) body.department = department;
+  return client.put(`/operators/${id}`, body);
 }
 
 export function deleteOperator(id, password) {

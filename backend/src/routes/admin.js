@@ -45,6 +45,15 @@ function flattenPrescription(row) {
     created_at: row.created_at,
     points_target_phone: row.points_target_phone,
     points_amount: row.points_amount,
+    original_amount: row.original_amount ?? '',
+    discount_type: row.discount_type || '',
+    discount_value: row.discount_value ?? '',
+    discounted_amount: row.discounted_amount ?? '',
+    balance_deduction: row.balance_deduction ?? '',
+    points_deduction: row.points_deduction ?? '',
+    points_deduction_amount: row.points_deduction_amount ?? '',
+    paid_amount: row.paid_amount ?? '',
+    points_earned: row.points_earned ?? '',
     age: page1.age ?? '',
     address: page1.address ?? '',
     lens_price: page6.lens_price ?? '',
@@ -170,6 +179,7 @@ router.get(
 
       const customers = db.prepare('SELECT * FROM customers ORDER BY created_at ASC').all();
       const points = db.prepare('SELECT * FROM points_ledger ORDER BY created_at ASC').all();
+      const balance = db.prepare('SELECT * FROM balance_ledger ORDER BY created_at ASC').all();
       const cases = db.prepare('SELECT * FROM cases ORDER BY created_at ASC').all();
       const prescriptions = db.prepare('SELECT * FROM prescriptions ORDER BY created_at ASC').all();
 
@@ -178,6 +188,9 @@ router.get(
 
       const wsPoints = XLSX.utils.json_to_sheet(points);
       XLSX.utils.book_append_sheet(wb, wsPoints, '积分明细');
+
+      const wsBalance = XLSX.utils.json_to_sheet(balance.length ? balance : [{}]);
+      XLSX.utils.book_append_sheet(wb, wsBalance, '余额明细');
 
       const flatCases = cases.map(flattenCase);
       const wsCases = XLSX.utils.json_to_sheet(flatCases.length ? flatCases : [{}]);

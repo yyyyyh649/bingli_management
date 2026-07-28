@@ -4,11 +4,12 @@ import { SYNC_STATUS } from '@optical/shared/constants.js';
 
 // 各同步表的可写字段白名单（与 schema 一致，防注入）
 const TABLE_FIELDS = {
-  customers: ['id', 'phone', 'name', 'member_card_no', 'address', 'store', 'operator', 'created_at', 'updated_at', 'sync_status'],
+  customers: ['id', 'phone', 'name', 'member_card_no', 'address', 'store', 'operator', 'balance', 'created_at', 'updated_at', 'sync_status'],
   points_ledger: ['id', 'customer_phone', 'amount', 'source_type', 'related_prescription_id', 'note', 'store', 'operator', 'created_at', 'sync_status'],
+  balance_ledger: ['id', 'customer_phone', 'amount', 'source_type', 'related_prescription_id', 'note', 'store', 'operator', 'created_at', 'sync_status'],
   cases: ['id', 'mode', 'customer_name', 'customer_phone', 'customer_gender', 'customer_address', 'condition', 'answers', 'record_date', 'store', 'operator', 'created_at', 'updated_at', 'sync_status'],
-  prescriptions: ['id', 'customer_phone', 'customer_name', 'page1', 'od_ds', 'od_dc', 'os_ds', 'os_dc', 'page6', 'points_target_phone', 'points_amount', 'record_date', 'store', 'operator', 'created_at', 'updated_at', 'sync_status'],
-  operators: ['id', 'name', 'store', 'sort_order', 'created_at', 'updated_at', 'sync_status'],
+  prescriptions: ['id', 'customer_phone', 'customer_name', 'page1', 'od_ds', 'od_dc', 'os_ds', 'os_dc', 'page6', 'points_target_phone', 'points_amount', 'original_amount', 'discount_type', 'discount_value', 'discounted_amount', 'balance_deduction', 'points_deduction', 'points_deduction_amount', 'paid_amount', 'points_earned', 'record_date', 'store', 'operator', 'created_at', 'updated_at', 'sync_status'],
+  operators: ['id', 'name', 'store', 'department', 'sort_order', 'created_at', 'updated_at', 'sync_status'],
 };
 
 function pickFields(table, payload) {
@@ -35,8 +36,8 @@ function applyCustomerUpsert(db, payload) {
     if (remote.updated_at && local.updated_at && remote.updated_at > local.updated_at) {
       // 远端较新，更新本地记录（保留本地 id 以免分裂）
       db.prepare(
-        `UPDATE customers SET name = ?, member_card_no = ?, address = ?, updated_at = ?, sync_status = ? WHERE id = ?`
-      ).run(remote.name, remote.member_card_no, remote.address, remote.updated_at, SYNC_STATUS.SYNCED, local.id);
+        `UPDATE customers SET name = ?, member_card_no = ?, address = ?, balance = ?, updated_at = ?, sync_status = ? WHERE id = ?`
+      ).run(remote.name, remote.member_card_no, remote.address, remote.balance ?? 0, remote.updated_at, SYNC_STATUS.SYNCED, local.id);
     }
     // 否则丢弃远端（本地较新）
     return;

@@ -4,13 +4,24 @@ import { v4 as uuidv4 } from 'uuid';
 import { ok, asyncHandler, ApiError } from '../lib/response.js';
 import { getDb } from '../db.js';
 import { recordChange, withChangeTx } from '../lib/outbox.js';
-import { nowISO, CASE_MODE, todayDate } from '@optical/shared/constants.js';
+import { nowISO, CASE_MODE, todayDate, DEPARTMENT } from '@optical/shared/constants.js';
 import { checkDeletePassword } from '../lib/password.js';
 import { ensureCustomer } from '../lib/customer.js';
 
 const router = Router();
 
 const VALID_MODES = new Set([CASE_MODE.SIMPLE, CASE_MODE.COMPLEX]);
+
+// 校验登记人是否属于眼科部
+function assertOphthalmologyOperator(db, operatorName) {
+  if (!operatorName) throw new ApiError('病例只能由眼科部登记人登记，请选择登记人');
+  const op = db.prepare('SELECT * FROM operators WHERE name = ?').get(String(operatorName).trim());
+  if (!op) throw new ApiError(`登记人「${operatorName}」不存在，请先在后台维护`);
+  const depts = (op.department || '').split(',').filter(Boolean);
+  if (!depts.includes(DEPARTMENT.OPHTHALMOLOGY)) {
+    throw new ApiError(`登记人「${operatorName}」不属于眼科部，病例只能由眼科部登记人登记`);
+  }
+}
 
 // 详情
 router.get('/:id', (req, res) => {
@@ -39,6 +50,10 @@ router.post(
     if (!VALID_MODES.has(mode)) throw new ApiError('mode 必须为 simple 或 complex');
 
     const db = getDb();
+
+    // 校验登记人必须属于眼科部
+    assertOphthalmologyOperator(db, operator);
+
     const id = uuidv4();
     const store = process.env.STORE_ID || 'store1';
     const now = nowISO();

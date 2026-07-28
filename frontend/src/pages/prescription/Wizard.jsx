@@ -16,10 +16,11 @@ import dayjs from 'dayjs';
 import { useNavigate } from 'react-router-dom';
 import Page1Basic from './Page1Basic.jsx';
 import PageEye from './PageEye.jsx';
-import PointsAttribution from './PointsAttribution.jsx';
+import PaymentModal from './PaymentModal.jsx';
 import { useOperators } from '../../api/operators.js';
 import { createPrescription } from '../../api/prescriptions.js';
 import { ApiError, DUPLICATE_CONFIRM_REQUIRED } from '../../api/client.js';
+import { DEPARTMENT } from '@optical/shared/constants.js';
 
 const STEP_TITLES = [
   '基本信息',
@@ -34,6 +35,12 @@ export default function PrescriptionWizard() {
   const navigate = useNavigate();
   const { operators, loading: opLoading } = useOperators();
 
+  // 只显示配镜部的登记人
+  const opticalOperators = operators.filter((op) => {
+    const depts = (op.department || '').split(',').filter(Boolean);
+    return depts.includes(DEPARTMENT.OPTICAL);
+  });
+
   const [page1Form] = Form.useForm();
   const [odDsForm] = Form.useForm();
   const [odDcForm] = Form.useForm();
@@ -43,9 +50,9 @@ export default function PrescriptionWizard() {
 
   const [current, setCurrent] = useState(0);
   const [submitting, setSubmitting] = useState(false);
-  const [attrOpen, setAttrOpen] = useState(false);
-  const [pendingPoints, setPendingPoints] = useState(0);
-  const [page1Snapshot, setPage1Snapshot] = useState({}); // 用于归属"本人"取 phone
+  const [payModalOpen, setPayModalOpen] = useState(false);
+  const [originalAmount, setOriginalAmount] = useState(0);
+  const [page1Snapshot, setPage1Snapshot] = useState({});
 
   const forms = [page1Form, odDsForm, odDcForm, osDsForm, osDcForm, page6Form];
 
@@ -53,7 +60,6 @@ export default function PrescriptionWizard() {
     try {
       const values = await forms[current].validateFields();
       if (current === 0) {
-        // 记录 page1，并规范化 record_date
         const normalized = {
           ...values,
           record_date: values.record_date
@@ -65,7 +71,7 @@ export default function PrescriptionWizard() {
       }
       setCurrent((c) => Math.min(c + 1, STEP_TITLES.length - 1));
     } catch (e) {
-      // 校验失败，Form 自动提示
+      // 校验失败
     }
   };
 
@@ -73,27 +79,22 @@ export default function PrescriptionWizard() {
     setCurrent((c) => Math.max(c - 1, 0));
   };
 
-  // 最后一步点击"提交"：先校验 page6，计算积分，弹归属 Modal
+  // 最后一步点击"提交"：先校验 page6，计算原价，弹支付弹窗
   const onSubmitClick = async () => {
     try {
       await page6Form.validateFields();
       const v = page6Form.getFieldsValue();
       const lens = Number(v.lens_price || 0);
       const frame = Number(v.frame_price || 0);
-      const points = Math.floor(lens + frame);
-      setPendingPoints(points);
-      // 若积分 > 0 才弹归属；积分为 0 直接提交（points_target_phone 留空）
-      if (points > 0) {
-        setAttrOpen(true);
-      } else {
-        doSubmit('');
-      }
+      const total = lens + frame;
+      setOriginalAmount(total);
+      setPayModalOpen(true);
     } catch (e) {
       // 校验失败
     }
   };
 
-  const buildPayload = (targetPhone, confirmDuplicate = false) => {
+  const buildPayload = (paymentResult, confirmDuplicate = false) => {
     const page1 = {
       ...page1Snapshot,
       record_date: page1Snapshot.record_date
@@ -117,20 +118,29 @@ export default function PrescriptionWizard() {
       },
       record_date: page1.record_date,
       operator: page6.operator,
-      points_target_phone: targetPhone || '',
+      // 支付参数
+      discountType: paymentResult.discountType,
+      discountValue: paymentResult.discountValue,
+      balanceDeduction: paymentResult.balanceDeduction,
+      balanceDeductionPhone: paymentResult.balanceDeductionPhone,
+      pointsDeduction: paymentResult.pointsDeduction,
+      pointsDeductionPhone: paymentResult.pointsDeductionPhone,
+      paidAmount: paymentResult.paidAmount,
+      pointsEarned: paymentResult.pointsEarned,
+      pointsTargetPhone: paymentResult.pointsTargetPhone,
     };
     if (confirmDuplicate) payload.confirmDuplicate = true;
     return payload;
   };
 
-  const doSubmit = async (targetPhone, confirmDuplicate = false) => {
+  const doSubmit = async (paymentResult, confirmDuplicate = false) => {
     setSubmitting(true);
     try {
-      const payload = buildPayload(targetPhone, confirmDuplicate);
+      const payload = buildPayload(paymentResult, confirmDuplicate);
       await createPrescription(payload);
       message.success('验光单登记成功');
-      setAttrOpen(false);
-      const phone = targetPhone || page1Snapshot.phone;
+      setPayModalOpen(false);
+      const phone = paymentResult.pointsTargetPhone || page1Snapshot.phone;
       if (phone) {
         Modal.confirm({
           title: '登记成功',
@@ -151,15 +161,14 @@ export default function PrescriptionWizard() {
       }
     } catch (e) {
       if (e instanceof ApiError && e.code === DUPLICATE_CONFIRM_REQUIRED) {
-        // 重复登记检测：弹确认
         const existing = e.data?.existingRecord || e.data || {};
         const dateStr = existing.record_date || existing.created_at || '(未知日期)';
         Modal.confirm({
           title: '重复登记确认',
-          content: `已存在一条相同数值的记录，登记于 ${dateStr}，是否仍要继续登记？`,
+          content: `已存在一条相同数值的积分记录，登记于 ${dateStr}，是否仍要继续登记？`,
           okText: '继续登记',
           cancelText: '取消',
-          onOk: () => doSubmit(targetPhone, true),
+          onOk: () => doSubmit(paymentResult, true),
         });
         return;
       }
@@ -176,7 +185,7 @@ export default function PrescriptionWizard() {
     page1Form.setFieldsValue({ record_date: dayjs() });
     setPage1Snapshot({});
     setCurrent(0);
-    setPendingPoints(0);
+    setOriginalAmount(0);
   };
 
   const renderStep = () => {
@@ -207,8 +216,12 @@ export default function PrescriptionWizard() {
               <Input placeholder="如 62" />
             </Form.Item>
             <Form.Item label="登记人" name="operator" rules={[{ required: true, message: '请选择登记人' }]}>
-              <Select placeholder={opLoading ? '加载中...' : '请选择登记人'} loading={opLoading} allowClear>
-                {operators.map((op) => (
+              <Select
+                placeholder={opLoading ? '加载中...' : '请选择登记人（仅配镜部）'}
+                loading={opLoading}
+                allowClear
+              >
+                {opticalOperators.map((op) => (
                   <Select.Option key={op.id} value={op.name}>
                     {op.name}
                   </Select.Option>
@@ -258,12 +271,12 @@ export default function PrescriptionWizard() {
         </Space>
       </div>
 
-      <PointsAttribution
-        open={attrOpen}
-        points={pendingPoints}
+      <PaymentModal
+        open={payModalOpen}
+        originalAmount={originalAmount}
         selfPhone={page1Snapshot.phone || ''}
-        onOk={(phone) => doSubmit(phone)}
-        onCancel={() => setAttrOpen(false)}
+        onOk={(result) => doSubmit(result)}
+        onCancel={() => setPayModalOpen(false)}
       />
     </Card>
   );

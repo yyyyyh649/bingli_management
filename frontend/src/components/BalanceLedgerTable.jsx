@@ -1,18 +1,16 @@
 import React from 'react';
 import { Table, Tag, Empty } from 'antd';
 
-// 积分来源类型 → 中文标签
-export const SOURCE_TYPE_LABELS = {
-  prescription: '验光配镜',
-  manual_add: '手动加分',
-  withdraw: '提现',
-  gift_redeem: '兑换小礼品',
-  consume_deduct: '验光单抵扣',
+// 余额来源类型 → 中文标签
+export const BALANCE_SOURCE_LABELS = {
+  topup: '充值',
+  consume: '消费抵扣',
+  manual_deduct: '手动扣减',
 };
 
-// 积分明细表（多处复用）
-// props: { points, loading }
-export default function PointsLedgerTable({ points = [], loading = false }) {
+// 余额明细表（与积分明细对称）
+// props: { balance, loading }
+export default function BalanceLedgerTable({ balance = [], loading = false }) {
   const columns = [
     {
       title: '日期时间',
@@ -33,7 +31,7 @@ export default function PointsLedgerTable({ points = [], loading = false }) {
         const positive = num >= 0;
         return (
           <span style={{ color: positive ? '#52c41a' : '#f5222d', fontWeight: 600 }}>
-            {positive ? `+${num}` : num}
+            {positive ? `+${num.toFixed(2)}` : num.toFixed(2)}
           </span>
         );
       },
@@ -44,8 +42,8 @@ export default function PointsLedgerTable({ points = [], loading = false }) {
       key: 'source_type',
       width: 110,
       render: (v) => (
-        <Tag color={v === 'prescription' ? 'blue' : v === 'manual_add' ? 'green' : 'orange'}>
-          {SOURCE_TYPE_LABELS[v] || v}
+        <Tag color={v === 'topup' ? 'green' : v === 'consume' ? 'blue' : 'orange'}>
+          {BALANCE_SOURCE_LABELS[v] || v}
         </Tag>
       ),
     },
@@ -69,8 +67,8 @@ export default function PointsLedgerTable({ points = [], loading = false }) {
     },
   ];
 
-  if (!loading && (!points || points.length === 0)) {
-    return <Empty description="暂无积分明细" />;
+  if (!loading && (!balance || balance.length === 0)) {
+    return <Empty description="暂无余额明细" />;
   }
 
   return (
@@ -78,7 +76,7 @@ export default function PointsLedgerTable({ points = [], loading = false }) {
       rowKey={(r) => r.id || r.created_at}
       size="small"
       columns={columns}
-      dataSource={points}
+      dataSource={balance}
       loading={loading}
       pagination={{ pageSize: 10, showSizeChanger: false }}
     />

@@ -8,9 +8,14 @@ import { SYNC_TABLES, nowISO } from '@optical/shared/constants.js';
 const TABLE_FIELDS = {
   customers: [
     'id', 'phone', 'name', 'member_card_no', 'address',
-    'store', 'operator', 'created_at', 'updated_at', 'sync_status',
+    'store', 'operator', 'balance', 'created_at', 'updated_at', 'sync_status',
   ],
   points_ledger: [
+    'id', 'customer_phone', 'amount', 'source_type',
+    'related_prescription_id', 'note', 'store', 'operator',
+    'created_at', 'sync_status',
+  ],
+  balance_ledger: [
     'id', 'customer_phone', 'amount', 'source_type',
     'related_prescription_id', 'note', 'store', 'operator',
     'created_at', 'sync_status',
@@ -23,11 +28,14 @@ const TABLE_FIELDS = {
   prescriptions: [
     'id', 'customer_phone', 'customer_name', 'page1',
     'od_ds', 'od_dc', 'os_ds', 'os_dc', 'page6',
-    'points_target_phone', 'points_amount', 'record_date',
-    'store', 'operator', 'created_at', 'updated_at', 'sync_status',
+    'points_target_phone', 'points_amount',
+    'original_amount', 'discount_type', 'discount_value', 'discounted_amount',
+    'balance_deduction', 'points_deduction', 'points_deduction_amount',
+    'paid_amount', 'points_earned',
+    'record_date', 'store', 'operator', 'created_at', 'updated_at', 'sync_status',
   ],
   operators: [
-    'id', 'name', 'store', 'sort_order',
+    'id', 'name', 'store', 'department', 'sort_order',
     'created_at', 'updated_at', 'sync_status',
   ],
 };

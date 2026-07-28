@@ -27,6 +27,24 @@ export function initDb(opts = {}) {
   const schema = readFileSync(schemaPath, 'utf8');
   db.exec(schema);
 
+  // 兼容旧库：为已有表补新增列
+  const migrations = [
+    'ALTER TABLE customers ADD COLUMN balance REAL NOT NULL DEFAULT 0',
+    'ALTER TABLE operators ADD COLUMN department TEXT DEFAULT ""',
+    'ALTER TABLE prescriptions ADD COLUMN original_amount REAL DEFAULT 0',
+    'ALTER TABLE prescriptions ADD COLUMN discount_type TEXT DEFAULT ""',
+    'ALTER TABLE prescriptions ADD COLUMN discount_value REAL DEFAULT 0',
+    'ALTER TABLE prescriptions ADD COLUMN discounted_amount REAL DEFAULT 0',
+    'ALTER TABLE prescriptions ADD COLUMN balance_deduction REAL DEFAULT 0',
+    'ALTER TABLE prescriptions ADD COLUMN points_deduction INTEGER DEFAULT 0',
+    'ALTER TABLE prescriptions ADD COLUMN points_deduction_amount REAL DEFAULT 0',
+    'ALTER TABLE prescriptions ADD COLUMN paid_amount REAL DEFAULT 0',
+    'ALTER TABLE prescriptions ADD COLUMN points_earned INTEGER DEFAULT 0',
+  ];
+  for (const sql of migrations) {
+    try { db.exec(sql); } catch { /* 列已存在，忽略 */ }
+  }
+
   dbInstance = db;
   return db;
 }

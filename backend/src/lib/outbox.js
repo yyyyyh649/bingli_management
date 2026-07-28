@@ -8,6 +8,7 @@ import { getDb } from '../db.js';
 const SYNC_TABLES = new Set([
   'customers',
   'points_ledger',
+  'balance_ledger',
   'cases',
   'prescriptions',
   'operators',

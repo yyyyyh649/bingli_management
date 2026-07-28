@@ -38,13 +38,14 @@ export function ensureCustomer(db, { phone, name = '', address = '', operator = 
     address: String(address || ''),
     store,
     operator: String(operator || ''),
+    balance: 0,
     created_at: now,
     updated_at: now,
     sync_status: 'pending',
   };
   db.prepare(
-    `INSERT INTO customers (id, phone, name, member_card_no, address, store, operator, created_at, updated_at, sync_status)
-     VALUES (@id, @phone, @name, @member_card_no, @address, @store, @operator, @created_at, @updated_at, @sync_status)`
+    `INSERT INTO customers (id, phone, name, member_card_no, address, store, operator, balance, created_at, updated_at, sync_status)
+     VALUES (@id, @phone, @name, @member_card_no, @address, @store, @operator, @balance, @created_at, @updated_at, @sync_status)`
   ).run(row);
   recordChange(db, { tableName: 'customers', recordId: id, operation: 'upsert', payload: row });
   return row;

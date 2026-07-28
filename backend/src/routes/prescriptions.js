@@ -4,13 +4,24 @@ import { v4 as uuidv4 } from 'uuid';
 import { ok, asyncHandler, ApiError } from '../lib/response.js';
 import { getDb } from '../db.js';
 import { recordChange, withChangeTx } from '../lib/outbox.js';
-import { nowISO, todayDate, POINTS_SOURCE } from '@optical/shared/constants.js';
+import { nowISO, todayDate, POINTS_SOURCE, BALANCE_SOURCE, DEPARTMENT, POINTS_TO_YUAN_RATE } from '@optical/shared/constants.js';
 import { checkDeletePassword } from '../lib/password.js';
 import { findDuplicatePoints } from '../lib/duplicate.js';
 import { ensureCustomer } from '../lib/customer.js';
 import { triggerPointsImmediatePush } from '../sync/index.js';
 
 const router = Router();
+
+// 校验登记人是否属于配镜部
+function assertOpticalOperator(db, operatorName) {
+  if (!operatorName) throw new ApiError('验光单只能由配镜部登记人登记，请选择登记人');
+  const op = db.prepare('SELECT * FROM operators WHERE name = ?').get(String(operatorName).trim());
+  if (!op) throw new ApiError(`登记人「${operatorName}」不存在，请先在后台维护`);
+  const depts = (op.department || '').split(',').filter(Boolean);
+  if (!depts.includes(DEPARTMENT.OPTICAL)) {
+    throw new ApiError(`登记人「${operatorName}」不属于配镜部，验光单只能由配镜部登记人登记`);
+  }
+}
 
 // 详情
 router.get('/:id', (req, res) => {
@@ -34,6 +45,15 @@ router.post(
       pointsTargetPhone = '',
       operator = '',
       confirmDuplicate = false,
+      // 支付与抵扣参数
+      discountType = '',          // 'discount' | 'reduction' | ''
+      discountValue = 0,          // 打折:折扣率(如0.8); 立减:金额
+      balanceDeduction = 0,       // 余额抵扣金额
+      balanceDeductionPhone = '', // 余额抵扣客户手机号（可不同于验光单本人）
+      pointsDeduction = 0,        // 积分抵扣消耗的积分数
+      pointsDeductionPhone = '',  // 积分抵扣客户手机号
+      paidAmount = 0,             // 实付金额（店员确认/可修改）
+      pointsEarned = null,        // 本次新增积分（店员可修改，null=自动按实付取整）
     } = req.body || {};
 
     const db = getDb();
@@ -43,18 +63,49 @@ router.post(
     const phone = page1.phone ? String(page1.phone).trim() : '';
     if (phone && !/^1\d{10}$/.test(phone)) throw new ApiError('手机号格式不正确');
 
-    // 计算积分
+    // 校验登记人必须属于配镜部
+    assertOpticalOperator(db, operator);
+
+    // 原价 = 镜片价 + 镜架价
     const lensPrice = Number(page6.lens_price || 0);
     const framePrice = Number(page6.frame_price || 0);
-    const total = lensPrice + framePrice;
-    const points = Math.floor(total); // 向下取整
+    const originalAmount = lensPrice + framePrice;
+
+    // 折后价
+    let discountedAmount = originalAmount;
+    if (discountType === 'discount') {
+      const rate = Number(discountValue);
+      if (!Number.isFinite(rate) || rate < 0 || rate > 1) throw new ApiError('打折折扣率必须在 0~1 之间（如 0.8 表示 8 折）');
+      discountedAmount = Math.round(originalAmount * rate * 100) / 100;
+    } else if (discountType === 'reduction') {
+      const reduction = Number(discountValue);
+      if (!Number.isFinite(reduction) || reduction < 0) throw new ApiError('立减金额必须 ≥ 0');
+      discountedAmount = Math.max(0, originalAmount - reduction);
+    }
+
+    // 余额抵扣
+    const balDeduct = Math.max(0, Number(balanceDeduction) || 0);
+    const balDeductPhone = balanceDeductionPhone ? String(balanceDeductionPhone).trim() : '';
+
+    // 积分抵扣
+    const ptsDeduct = Math.max(0, Math.floor(Number(pointsDeduction) || 0));
+    // 积分抵扣必须是 POINTS_TO_YUAN_RATE 的倍数
+    const ptsDeductRounded = Math.floor(ptsDeduct / POINTS_TO_YUAN_RATE) * POINTS_TO_YUAN_RATE;
+    const ptsDeductAmount = ptsDeductRounded / POINTS_TO_YUAN_RATE;
+    const ptsDeductPhone = pointsDeductionPhone ? String(pointsDeductionPhone).trim() : '';
+
+    // 实付金额
+    const paid = Math.max(0, Number(paidAmount) || 0);
+
+    // 新增积分（默认 = 实付金额取整，店员可覆盖）
+    const earned = pointsEarned != null ? Math.floor(Number(pointsEarned) || 0) : Math.floor(paid);
 
     // 积分归属手机号
     const targetPhone = pointsTargetPhone ? String(pointsTargetPhone).trim() : '';
 
     // 重复登记检测：仅当会写积分时
-    if (points > 0 && targetPhone && !confirmDuplicate) {
-      const dup = findDuplicatePoints(db, { customerPhone: targetPhone, amount: points });
+    if (earned > 0 && targetPhone && !confirmDuplicate) {
+      const dup = findDuplicatePoints(db, { customerPhone: targetPhone, amount: earned });
       if (dup) {
         return res.json({
           ok: false,
@@ -77,7 +128,16 @@ router.post(
       os_dc: JSON.stringify(os_dc),
       page6: JSON.stringify(page6),
       points_target_phone: targetPhone,
-      points_amount: points > 0 && targetPhone ? points : 0,
+      points_amount: earned > 0 && targetPhone ? earned : 0,
+      original_amount: originalAmount,
+      discount_type: discountType,
+      discount_value: Number(discountValue) || 0,
+      discounted_amount: discountedAmount,
+      balance_deduction: balDeduct,
+      points_deduction: ptsDeductRounded,
+      points_deduction_amount: ptsDeductAmount,
+      paid_amount: paid,
+      points_earned: earned > 0 && targetPhone ? earned : 0,
       record_date: recDate,
       store,
       operator: String(operator || ''),
@@ -86,13 +146,12 @@ router.post(
       sync_status: 'pending',
     };
 
-    let pointsRow = null;
+    let pointsEarnedRow = null;
+    let pointsDeductRow = null;
+    let balanceDeductRow = null;
 
     withChangeTx(db, () => {
-      // 自动为客户建 stub 档案：
-      //   - page1.phone（验光单本人）：若不存在则建
-      //   - pointsTargetPhone（积分归属手机号，可能是朋友/家人）：若不存在则建
-      //   - 两者可能不同，需分别 ensure
+      // 自动为客户建 stub 档案
       if (phone) {
         ensureCustomer(db, {
           phone,
@@ -105,19 +164,86 @@ router.post(
         ensureCustomer(db, { phone: targetPhone, operator: String(operator || '') });
       }
 
+      // 余额抵扣：检查余额 + 写 balance_ledger + 更新 customers.balance
+      if (balDeduct > 0 && balDeductPhone) {
+        const customer = db.prepare('SELECT * FROM customers WHERE phone = ?').get(balDeductPhone);
+        if (!customer) throw new ApiError(`余额抵扣客户「${balDeductPhone}」不存在`);
+        const currentBalance = Number(customer.balance || 0);
+        if (currentBalance < balDeduct) {
+          throw new ApiError(`客户「${balDeductPhone}」余额不足（当前 ${currentBalance.toFixed(2)} 元，需扣减 ${balDeduct.toFixed(2)} 元）`);
+        }
+        const bid = uuidv4();
+        balanceDeductRow = {
+          id: bid,
+          customer_phone: balDeductPhone,
+          amount: -balDeduct,
+          source_type: BALANCE_SOURCE.CONSUME,
+          related_prescription_id: id,
+          note: '',
+          store,
+          operator: String(operator || ''),
+          created_at: now,
+          sync_status: 'pending',
+        };
+        db.prepare(
+          `INSERT INTO balance_ledger (id, customer_phone, amount, source_type, related_prescription_id, note, store, operator, created_at, sync_status)
+           VALUES (@id, @customer_phone, @amount, @source_type, @related_prescription_id, @note, @store, @operator, @created_at, @sync_status)`
+        ).run(balanceDeductRow);
+        recordChange(db, { tableName: 'balance_ledger', recordId: bid, operation: 'upsert', payload: balanceDeductRow });
+
+        db.prepare('UPDATE customers SET balance = balance + ?, updated_at = ?, sync_status = ? WHERE phone = ?')
+          .run(-balDeduct, now, 'pending', balDeductPhone);
+        const updatedCust = db.prepare('SELECT * FROM customers WHERE phone = ?').get(balDeductPhone);
+        if (updatedCust) recordChange(db, { tableName: 'customers', recordId: updatedCust.id, operation: 'upsert', payload: updatedCust });
+      }
+
+      // 积分抵扣：检查积分 + 写 points_ledger（负数）
+      if (ptsDeductRounded > 0 && ptsDeductPhone) {
+        const existingPoints = db
+          .prepare('SELECT COALESCE(SUM(amount), 0) AS total FROM points_ledger WHERE customer_phone = ?')
+          .get(ptsDeductPhone);
+        const currentPoints = Number(existingPoints?.total || 0);
+        if (currentPoints < ptsDeductRounded) {
+          throw new ApiError(`客户「${ptsDeductPhone}」积分不足（当前 ${currentPoints} 分，需消耗 ${ptsDeductRounded} 分）`);
+        }
+        const pid = uuidv4();
+        pointsDeductRow = {
+          id: pid,
+          customer_phone: ptsDeductPhone,
+          amount: -ptsDeductRounded,
+          source_type: POINTS_SOURCE.CONSUME_DEDUCT,
+          related_prescription_id: id,
+          note: `验光单积分抵扣（${ptsDeductAmount}元）`,
+          store,
+          operator: String(operator || ''),
+          created_at: now,
+          sync_status: 'pending',
+        };
+        db.prepare(
+          `INSERT INTO points_ledger (id, customer_phone, amount, source_type, related_prescription_id, note, store, operator, created_at, sync_status)
+           VALUES (@id, @customer_phone, @amount, @source_type, @related_prescription_id, @note, @store, @operator, @created_at, @sync_status)`
+        ).run(pointsDeductRow);
+        recordChange(db, { tableName: 'points_ledger', recordId: pid, operation: 'upsert', payload: pointsDeductRow });
+      }
+
+      // 写验光单
       db.prepare(
-        `INSERT INTO prescriptions (id, customer_phone, customer_name, page1, od_ds, od_dc, os_ds, os_dc, page6, points_target_phone, points_amount, record_date, store, operator, created_at, updated_at, sync_status)
-         VALUES (@id, @customer_phone, @customer_name, @page1, @od_ds, @od_dc, @os_ds, @os_dc, @page6, @points_target_phone, @points_amount, @record_date, @store, @operator, @created_at, @updated_at, @sync_status)`
+        `INSERT INTO prescriptions (id, customer_phone, customer_name, page1, od_ds, od_dc, os_ds, os_dc, page6, points_target_phone, points_amount,
+           original_amount, discount_type, discount_value, discounted_amount, balance_deduction, points_deduction, points_deduction_amount, paid_amount, points_earned,
+           record_date, store, operator, created_at, updated_at, sync_status)
+         VALUES (@id, @customer_phone, @customer_name, @page1, @od_ds, @od_dc, @os_ds, @os_dc, @page6, @points_target_phone, @points_amount,
+           @original_amount, @discount_type, @discount_value, @discounted_amount, @balance_deduction, @points_deduction, @points_deduction_amount, @paid_amount, @points_earned,
+           @record_date, @store, @operator, @created_at, @updated_at, @sync_status)`
       ).run(prescriptionRow);
       recordChange(db, { tableName: 'prescriptions', recordId: id, operation: 'upsert', payload: prescriptionRow });
 
-      // 写积分
-      if (points > 0 && targetPhone) {
-        const pid = uuidv4();
-        pointsRow = {
-          id: pid,
+      // 写新增积分
+      if (earned > 0 && targetPhone) {
+        const pid2 = uuidv4();
+        pointsEarnedRow = {
+          id: pid2,
           customer_phone: targetPhone,
-          amount: points,
+          amount: earned,
           source_type: POINTS_SOURCE.PRESCRIPTION,
           related_prescription_id: id,
           note: '',
@@ -129,20 +255,25 @@ router.post(
         db.prepare(
           `INSERT INTO points_ledger (id, customer_phone, amount, source_type, related_prescription_id, note, store, operator, created_at, sync_status)
            VALUES (@id, @customer_phone, @amount, @source_type, @related_prescription_id, @note, @store, @operator, @created_at, @sync_status)`
-        ).run(pointsRow);
-        recordChange(db, { tableName: 'points_ledger', recordId: pid, operation: 'upsert', payload: pointsRow });
+        ).run(pointsEarnedRow);
+        recordChange(db, { tableName: 'points_ledger', recordId: pid2, operation: 'upsert', payload: pointsEarnedRow });
       }
     });
 
     // 积分即时推送
-    if (pointsRow) {
-      triggerPointsImmediatePush(pointsRow).catch((e) => {
+    if (pointsEarnedRow) {
+      triggerPointsImmediatePush(pointsEarnedRow).catch((e) => {
         // eslint-disable-next-line no-console
         console.error('[prescription] 积分即时推送失败（待常规轮询补推）:', e.message);
       });
     }
 
-    res.json(ok({ prescription: prescriptionRow, pointsLedger: pointsRow }));
+    res.json(ok({
+      prescription: prescriptionRow,
+      pointsEarned: pointsEarnedRow,
+      pointsDeducted: pointsDeductRow,
+      balanceDeducted: balanceDeductRow,
+    }));
   })
 );
 
