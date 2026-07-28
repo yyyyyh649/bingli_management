@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { ok, asyncHandler, ApiError } from '../lib/response.js';
 import { getDb } from '../db.js';
 import { recordChange, withChangeTx } from '../lib/outbox.js';
-import { nowISO } from '@optical/shared/constants.js';
+import { nowISO, todayDate } from '@optical/shared/constants.js';
 import { REVIEW_CONTACT_STATUS, DEFAULT_REVIEW_CYCLE_DAYS } from '@optical/shared/constants.js';
 import { checkDeletePassword } from '../lib/password.js';
 
@@ -56,7 +56,7 @@ router.get('/search', (req, res) => {
 // 规则：最近一次记录日期 + review_cycle_days < 今天 → 需复查
 router.get('/review-reminders', (req, res) => {
   const db = getDb();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayDate();
 
   // 配镜部：基于最近一次验光单
   const optical = db

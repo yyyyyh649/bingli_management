@@ -107,12 +107,14 @@ export const SYNC_DEFAULTS = {
   POLLING_FALLBACK_MS: 8000,
 };
 
-// 当前时间戳（精确到秒，ISO 字符串）
+// 当前时间戳（北京时间，精确到秒，格式 YYYY-MM-DDTHH:mm:ss）
+// 统一用 Asia/Shanghai 时区，不依赖服务器时区设置；
+// 存为不带 Z 的字符串，前端直接显示即为北京时间，无需转换
 export function nowISO() {
-  return new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+  return new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Shanghai', hour12: false }).replace(' ', 'T');
 }
 
-// 当前日期 YYYY-MM-DD
+// 当前日期 YYYY-MM-DD（北京时间）
 export function todayDate() {
-  return new Date().toISOString().slice(0, 10);
+  return new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Shanghai' });
 }
