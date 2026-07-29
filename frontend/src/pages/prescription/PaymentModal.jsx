@@ -6,6 +6,7 @@ import {
   InputNumber,
   Button,
   Space,
+  Spin,
   message,
   Typography,
   Divider,
@@ -52,9 +53,12 @@ export default function PaymentModal({
   // 余额抵扣
   const [useBalance, setUseBalance] = useState(false);
   const [balanceSearchKey, setBalanceSearchKey] = useState('');
-  const [balanceCustomer, setBalanceCustomer] = useState(null); // {phone, name, balance, points}
+  // 按 IMPLEMENTATION.md Phase 4：支付改"列表+店员选"，不再自动绑定
+  const [balanceCustomerList, setBalanceCustomerList] = useState([]); // 搜索结果列表
+  const [balanceCustomer, setBalanceCustomer] = useState(null); // 店员选中的客户 {phone, name, balance, points}
   const [balanceDeduction, setBalanceDeduction] = useState(0);
   const [balanceSearching, setBalanceSearching] = useState(false);
+  const [balanceSelecting, setBalanceSelecting] = useState(false); // 选中后查积分 loading
 
   // 积分抵扣
   const [usePoints, setUsePoints] = useState(false);
@@ -80,6 +84,7 @@ export default function PaymentModal({
       setDiscountValue(null);
       setUseBalance(false);
       setBalanceSearchKey('');
+      setBalanceCustomerList([]);
       setBalanceCustomer(null);
       setBalanceDeduction(0);
       setUsePoints(false);
@@ -135,50 +140,56 @@ export default function PaymentModal({
     }
   }, [paidAmount, pointsEarnedEdited]);
 
-  // 搜索客户（余额抵扣用）
+  // 按 IMPLEMENTATION.md Phase 4：搜索客户返回列表，不再自动绑定
+  // 支持按 姓名/手机号/卡号 查询（后端 /customers/search 自动适配）
   const searchCustomer = async () => {
     const q = balanceSearchKey.trim();
     if (!q) return;
     setBalanceSearching(true);
     try {
-      let customer = null;
-      // 纯数字 → 按手机号精确查
-      if (/^\d{11}$/.test(q)) {
-        try {
-          customer = await getCustomerByPhone(q);
-        } catch {
-          customer = null;
-        }
-      }
-      // 否则 → 模糊搜索取第一条
-      if (!customer) {
-        const list = await searchCustomers(q);
-        if (Array.isArray(list) && list.length > 0) {
-          customer = list[0];
-        }
-      }
-      if (customer) {
-        // 查积分
-        let points = 0;
-        try {
-          const ledger = await listPoints(customer.phone);
-          if (Array.isArray(ledger)) {
-            points = ledger.reduce((s, x) => s + Number(x.amount || 0), 0);
-          }
-        } catch { /* ignore */ }
-        setBalanceCustomer({ ...customer, points });
-        setBalanceDeduction(0);
-        setUsePoints(false);
-        setPointsDeduction(0);
-        // 自动同步积分归属为客户本人
-        setPointsChoice('balance_customer');
-      } else {
+      const list = await searchCustomers(q);
+      const arr = Array.isArray(list) ? list : [];
+      if (arr.length === 0) {
         message.warning('未找到匹配客户');
+        setBalanceCustomerList([]);
+      } else {
+        setBalanceCustomerList(arr);
       }
+      // 清除之前选中的客户（需重新选择）
+      setBalanceCustomer(null);
+      setBalanceDeduction(0);
+      setUsePoints(false);
+      setPointsDeduction(0);
+    } catch (e) {
+      // 拦截器已提示
+      setBalanceCustomerList([]);
+    } finally {
+      setBalanceSearching(false);
+    }
+  };
+
+  // 按 IMPLEMENTATION.md Phase 4：店员从列表中勾选确认后，才使用该卡余额/积分
+  const selectBalanceCustomer = async (customer) => {
+    setBalanceSelecting(true);
+    try {
+      // 查积分
+      let points = 0;
+      try {
+        const ledger = await listPoints(customer.phone);
+        if (Array.isArray(ledger)) {
+          points = ledger.reduce((s, x) => s + Number(x.amount || 0), 0);
+        }
+      } catch { /* ignore */ }
+      setBalanceCustomer({ ...customer, points });
+      setBalanceDeduction(0);
+      setUsePoints(false);
+      setPointsDeduction(0);
+      // 自动同步积分归属为选中的客户
+      setPointsChoice('balance_customer');
     } catch (e) {
       // 拦截器已提示
     } finally {
-      setBalanceSearching(false);
+      setBalanceSelecting(false);
     }
   };
 
@@ -336,19 +347,60 @@ export default function PaymentModal({
         ) : (
           <div>
             {!balanceCustomer ? (
-              <Space.Compact style={{ width: '100%' }}>
-                <Input
-                  placeholder="输入手机号 / 姓名 / 会员码搜索客户"
-                  value={balanceSearchKey}
-                  onChange={(e) => setBalanceSearchKey(e.target.value)}
-                  onPressEnter={searchCustomer}
-                  allowClear
-                />
-                <Button type="primary" icon={<SearchOutlined />} onClick={searchCustomer} loading={balanceSearching}>
-                  搜索
-                </Button>
-                <Button onClick={() => setUseBalance(false)}>取消</Button>
-              </Space.Compact>
+              <div>
+                {/* 按 IMPLEMENTATION.md Phase 4：搜索框 + 列表展示，店员勾选确认后才绑定 */}
+                <Space.Compact style={{ width: '100%' }}>
+                  <Input
+                    placeholder="输入 姓名 / 手机号 / 卡号 搜索客户"
+                    value={balanceSearchKey}
+                    onChange={(e) => setBalanceSearchKey(e.target.value)}
+                    onPressEnter={searchCustomer}
+                    allowClear
+                  />
+                  <Button type="primary" icon={<SearchOutlined />} onClick={searchCustomer} loading={balanceSearching}>
+                    搜索
+                  </Button>
+                  <Button onClick={() => { setUseBalance(false); setBalanceCustomerList([]); }}>取消</Button>
+                </Space.Compact>
+                {/* 搜索结果列表：店员从中选择要抵扣的客户 */}
+                {balanceCustomerList.length > 0 && (
+                  <Spin spinning={balanceSelecting}>
+                    <div style={{ marginTop: 8 }}>
+                      <Text type="secondary" style={{ fontSize: 12 }}>
+                        共 {balanceCustomerList.length} 条匹配，请选择要使用余额/积分的客户：
+                      </Text>
+                      <div style={{ marginTop: 8 }}>
+                        {balanceCustomerList.map((c) => (
+                          <div
+                            key={c.id || c.phone}
+                            style={{
+                              padding: '8px 12px',
+                              marginBottom: 4,
+                              border: '1px solid #f0f0f0',
+                              borderRadius: 6,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                            }}
+                            onClick={() => selectBalanceCustomer(c)}
+                            onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#1677ff'; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#f0f0f0'; }}
+                          >
+                            <Space wrap>
+                              <Tag color="blue">{c.name || '(未填姓名)'}</Tag>
+                              <Text type="secondary">{c.phone}</Text>
+                              {c.member_card_no ? <Tag color="gold">{c.member_card_no}</Tag> : null}
+                              <Tag color="green">余额 ¥{Number(c.balance || 0).toFixed(2)}</Tag>
+                            </Space>
+                            <Button type="link" size="small">选择</Button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </Spin>
+                )}
+              </div>
             ) : (
               <div>
                 <Space style={{ marginBottom: 8 }} wrap>
@@ -356,7 +408,7 @@ export default function PaymentModal({
                   <Text type="secondary">{balanceCustomer.phone}</Text>
                   <Tag color="green">余额 ¥{Number(balanceCustomer.balance || 0).toFixed(2)}</Tag>
                   <Tag color="orange">积分 {balanceCustomer.points || 0} 分</Tag>
-                  <Button size="small" onClick={() => { setBalanceCustomer(null); setBalanceDeduction(0); }}>
+                  <Button size="small" onClick={() => { setBalanceCustomer(null); setBalanceDeduction(0); setBalanceCustomerList([]); }}>
                     更换客户
                   </Button>
                 </Space>

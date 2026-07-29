@@ -94,11 +94,15 @@ export default function PrescriptionDetail({ prescription }) {
           { key: 'date', label: '登记日期', children: meta.record_date || page1.record_date || '-' },
           { key: 'op', label: '登记人', children: meta.operator || '-' },
           { key: 'store', label: '登记门店', children: meta.store || '-' },
+          // 按 IMPLEMENTATION.md Phase 4 / 1.2：复查周期
+          { key: 'review_cycle', label: '复查周期', children: meta.review_cycle_days ? `${meta.review_cycle_days} 天` : '-' },
           {
             key: 'points',
             label: '产生积分',
             children: meta.points_amount != null ? `${meta.points_amount} 分` : '-',
           },
+          // 按 IMPLEMENTATION.md Phase 4 / 1.6：备注
+          ...(meta.notes ? [{ key: 'notes', label: '备注', children: meta.notes }] : []),
         ]}
       />
     </div>

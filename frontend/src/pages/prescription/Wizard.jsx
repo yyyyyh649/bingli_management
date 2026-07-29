@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Card,
   Steps,
@@ -11,7 +11,9 @@ import {
   Modal,
   Spin,
   Select,
+  Tooltip,
 } from 'antd';
+import { UserAddOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useNavigate } from 'react-router-dom';
 import Page1Basic from './Page1Basic.jsx';
@@ -20,16 +22,16 @@ import PaymentModal from './PaymentModal.jsx';
 import { useOperators } from '../../api/operators.js';
 import { createPrescription } from '../../api/prescriptions.js';
 import { ApiError, DUPLICATE_CONFIRM_REQUIRED } from '../../api/client.js';
-import { DEPARTMENT } from '@optical/shared/constants.js';
+import { DEPARTMENT, DEFAULT_REVIEW_CYCLE_DAYS } from '@optical/shared/constants.js';
 
-const STEP_TITLES = [
-  '基本信息',
-  '右眼 DS',
-  '右眼 DC',
-  '左眼 DS',
-  '左眼 DC',
-  '价格与瞳距',
-];
+// 按 IMPLEMENTATION.md Phase 4：两页化
+// 第1页 = 个人信息（含必填校验）+ 候选列表 + 双区 + 办卡跳转按钮
+// 第2页 = 全部眼部信息 + 金额 + 复查时间（默认90）+ 备注 + 登记人
+// 其后  = 支付页（PaymentModal）
+const PAGE_TITLES = ['基本信息', '验光信息'];
+
+// 按 IMPLEMENTATION.md Phase 4：办卡跳转时暂存表单数据到 sessionStorage，返回时恢复
+const FORM_SNAPSHOT_KEY = 'rx_wizard_snapshot';
 
 export default function PrescriptionWizard() {
   const navigate = useNavigate();
@@ -46,30 +48,55 @@ export default function PrescriptionWizard() {
   const [odDcForm] = Form.useForm();
   const [osDsForm] = Form.useForm();
   const [osDcForm] = Form.useForm();
-  const [page6Form] = Form.useForm();
+  const [page2Form] = Form.useForm(); // 金额 + 瞳距 + 复查周期 + 备注 + 登记人
 
   const [current, setCurrent] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [payModalOpen, setPayModalOpen] = useState(false);
   const [originalAmount, setOriginalAmount] = useState(0);
   const [page1Snapshot, setPage1Snapshot] = useState({});
+  // 按 IMPLEMENTATION.md Phase 4：会员匹配结果（来自 RegistrationContext），用于控制办卡按钮可点/禁用
+  const [memberMatch, setMemberMatch] = useState(null);
 
-  const forms = [page1Form, odDsForm, odDcForm, osDsForm, osDcForm, page6Form];
+  // 按 IMPLEMENTATION.md Phase 4：从会员登记页返回时，恢复暂存的表单数据
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(FORM_SNAPSHOT_KEY);
+      if (raw) {
+        const snap = JSON.parse(raw);
+        if (snap.page1) {
+          page1Form.setFieldsValue({
+            ...snap.page1,
+            record_date: snap.page1.record_date ? dayjs(snap.page1.record_date) : dayjs(),
+          });
+        }
+        if (snap.odDs) odDsForm.setFieldsValue(snap.odDs);
+        if (snap.odDc) odDcForm.setFieldsValue(snap.odDc);
+        if (snap.osDs) osDsForm.setFieldsValue(snap.osDs);
+        if (snap.osDc) osDcForm.setFieldsValue(snap.osDc);
+        if (snap.page2) page2Form.setFieldsValue(snap.page2);
+        // 恢复后清除快照，避免下次进入仍恢复
+        sessionStorage.removeItem(FORM_SNAPSHOT_KEY);
+        if (snap.currentPage) setCurrent(snap.currentPage);
+      }
+    } catch {
+      // ignore parse errors
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const next = async () => {
     try {
-      const values = await forms[current].validateFields();
-      if (current === 0) {
-        const normalized = {
-          ...values,
-          record_date: values.record_date
-            ? dayjs(values.record_date).format('YYYY-MM-DD')
-            : dayjs().format('YYYY-MM-DD'),
-        };
-        setPage1Snapshot(normalized);
-        page1Form.setFieldsValue({ record_date: dayjs(normalized.record_date) });
-      }
-      setCurrent((c) => Math.min(c + 1, STEP_TITLES.length - 1));
+      const values = await page1Form.validateFields();
+      const normalized = {
+        ...values,
+        record_date: values.record_date
+          ? dayjs(values.record_date).format('YYYY-MM-DD')
+          : dayjs().format('YYYY-MM-DD'),
+      };
+      setPage1Snapshot(normalized);
+      page1Form.setFieldsValue({ record_date: dayjs(normalized.record_date) });
+      setCurrent((c) => Math.min(c + 1, PAGE_TITLES.length - 1));
     } catch (e) {
       // 校验失败
     }
@@ -79,11 +106,11 @@ export default function PrescriptionWizard() {
     setCurrent((c) => Math.max(c - 1, 0));
   };
 
-  // 最后一步点击"提交"：先校验 page6，计算原价，弹支付弹窗
+  // 第2页点击"提交"：先校验 page2，计算原价，弹支付弹窗
   const onSubmitClick = async () => {
     try {
-      await page6Form.validateFields();
-      const v = page6Form.getFieldsValue();
+      await page2Form.validateFields();
+      const v = page2Form.getFieldsValue();
       const lens = Number(v.lens_price || 0);
       const frame = Number(v.frame_price || 0);
       const total = lens + frame;
@@ -101,7 +128,7 @@ export default function PrescriptionWizard() {
         ? dayjs(page1Snapshot.record_date).format('YYYY-MM-DD')
         : dayjs().format('YYYY-MM-DD'),
     };
-    const page6 = page6Form.getFieldsValue();
+    const page2 = page2Form.getFieldsValue();
     const payload = {
       customer_phone: page1.phone || '',
       customer_name: page1.name || '',
@@ -113,13 +140,16 @@ export default function PrescriptionWizard() {
       os_ds: osDsForm.getFieldsValue(),
       os_dc: osDcForm.getFieldsValue(),
       page6: {
-        lens_price: page6.lens_price,
-        frame_price: page6.frame_price,
-        pd_near: page6.pd_near,
-        pd_far: page6.pd_far,
+        lens_price: page2.lens_price,
+        frame_price: page2.frame_price,
+        pd_near: page2.pd_near,
+        pd_far: page2.pd_far,
       },
+      // 按 IMPLEMENTATION.md Phase 4 / 1.6：复查周期 + 备注（显式列，已就绪）
+      reviewCycleDays: Number(page2.review_cycle_days) || DEFAULT_REVIEW_CYCLE_DAYS,
+      notes: String(page2.notes || '').trim(),
       record_date: page1.record_date,
-      operator: page6.operator,
+      operator: page2.operator,
       // 支付参数
       discountType: paymentResult.discountType,
       discountValue: paymentResult.discountValue,
@@ -142,6 +172,8 @@ export default function PrescriptionWizard() {
       await createPrescription(payload);
       message.success('验光单登记成功');
       setPayModalOpen(false);
+      // 提交成功后清除快照
+      sessionStorage.removeItem(FORM_SNAPSHOT_KEY);
       const phone = paymentResult.pointsTargetPhone || page1Snapshot.phone;
       if (phone) {
         Modal.confirm({
@@ -181,53 +213,110 @@ export default function PrescriptionWizard() {
   };
 
   const resetAll = () => {
-    [page1Form, odDsForm, odDcForm, osDsForm, osDcForm, page6Form].forEach((f) =>
+    [page1Form, odDsForm, odDcForm, osDsForm, osDcForm, page2Form].forEach((f) =>
       f.resetFields()
     );
     page1Form.setFieldsValue({ record_date: dayjs() });
+    page2Form.setFieldsValue({ review_cycle_days: DEFAULT_REVIEW_CYCLE_DAYS });
     setPage1Snapshot({});
     setCurrent(0);
     setOriginalAmount(0);
+    sessionStorage.removeItem(FORM_SNAPSHOT_KEY);
   };
 
+  // 按 IMPLEMENTATION.md Phase 4：办卡跳转按钮
+  // 规则：输入姓名+手机号后，若会员匹配列表为空 → 可点；已有会员 → 禁用
+  // 跳转时自动带入已填姓名/手机号/住址/年龄/生日；返回时保留已填数据（用 sessionStorage 快照）
+  const handleGoRegister = () => {
+    const v = page1Form.getFieldsValue();
+    // 暂存全部表单数据，返回时恢复
+    const snapshot = {
+      page1: {
+        ...v,
+        record_date: v.record_date ? dayjs(v.record_date).format('YYYY-MM-DD') : '',
+      },
+      odDs: odDsForm.getFieldsValue(),
+      odDc: odDcForm.getFieldsValue(),
+      osDs: osDsForm.getFieldsValue(),
+      osDc: osDcForm.getFieldsValue(),
+      page2: page2Form.getFieldsValue(),
+      currentPage: current,
+    };
+    sessionStorage.setItem(FORM_SNAPSHOT_KEY, JSON.stringify(snapshot));
+    navigate('/customer/register', {
+      state: {
+        name: v.name || '',
+        phone: v.phone || '',
+        address: v.address || '',
+        age: v.age || undefined,
+        // birthday 不在验光单 page1 表单中，但若未来加入则一并带入
+      },
+    });
+  };
+
+  // 办卡按钮可点条件：姓名和手机号都已填 + 会员匹配为空
+  const canGoRegister = (() => {
+    const name = String(page1Snapshot.name || page1Form.getFieldValue('name') || '').trim();
+    const phone = String(page1Snapshot.phone || page1Form.getFieldValue('phone') || '').trim();
+    const hasNamePhone = name && /^\d{11}$/.test(phone);
+    const hasMember = !!memberMatch;
+    return hasNamePhone && !hasMember;
+  })();
+
   // 按 IMPLEMENTATION.md Phase 0 Bug-1 调整：
-  // 原先用 switch 只渲染当前 step，切换步骤时上一步组件被卸载，
-  // 导致 antd Form 的 getFieldsValue() 在最后一步取不到已卸载组件的字段值（眼部数据丢失）。
-  // 改为渲染所有步骤、用 CSS display 控制显隐，确保所有 Form.Item 始终挂载，字段值始终可取。
+  // 渲染所有步骤、用 CSS display 控制显隐，确保所有 Form.Item 始终挂载，字段值始终可取。
   const renderStep = () => {
     const steps = [
-      <Page1Basic form={page1Form} />,
-      <PageEye form={odDsForm} eye="od" rxType="ds" />,
-      <PageEye form={odDcForm} eye="od" rxType="dc" />,
-      <PageEye form={osDsForm} eye="os" rxType="ds" />,
-      <PageEye form={osDcForm} eye="os" rxType="dc" />,
-      <Form form={page6Form} layout="vertical" style={{ maxWidth: 560 }}>
-        <Form.Item label="镜片价（元）" name="lens_price" rules={[{ required: true, message: '请输入镜片价' }]}>
-          <InputNumber min={0} style={{ width: '100%' }} placeholder="数字" />
-        </Form.Item>
-        <Form.Item label="镜架价（元）" name="frame_price" rules={[{ required: true, message: '请输入镜架价' }]}>
-          <InputNumber min={0} style={{ width: '100%' }} placeholder="数字" />
-        </Form.Item>
-        <Form.Item label="瞳距（近）" name="pd_near">
-          <Input placeholder="如 60" />
-        </Form.Item>
-        <Form.Item label="瞳距（远）" name="pd_far">
-          <Input placeholder="如 62" />
-        </Form.Item>
-        <Form.Item label="登记人" name="operator" rules={[{ required: true, message: '请选择登记人' }]}>
-          <Select
-            placeholder={opLoading ? '加载中...' : '请选择登记人（仅配镜部）'}
-            loading={opLoading}
-            allowClear
+      <Page1Basic form={page1Form} onMemberChange={setMemberMatch} />,
+      <div>
+        {/* 第2页：全部眼部信息 */}
+        <PageEye form={odDsForm} eye="od" rxType="ds" />
+        <PageEye form={odDcForm} eye="od" rxType="dc" />
+        <PageEye form={osDsForm} eye="os" rxType="ds" />
+        <PageEye form={osDcForm} eye="os" rxType="dc" />
+        {/* 第2页：金额 + 瞳距 + 复查时间 + 备注 + 登记人 */}
+        <Form form={page2Form} layout="vertical" style={{ maxWidth: 560, marginTop: 16 }}
+          initialValues={{ review_cycle_days: DEFAULT_REVIEW_CYCLE_DAYS }}>
+          <Form.Item label="镜片价（元）" name="lens_price" rules={[{ required: true, message: '请输入镜片价' }]}>
+            <InputNumber min={0} style={{ width: '100%' }} placeholder="数字" />
+          </Form.Item>
+          <Form.Item label="镜架价（元）" name="frame_price" rules={[{ required: true, message: '请输入镜架价' }]}>
+            <InputNumber min={0} style={{ width: '100%' }} placeholder="数字" />
+          </Form.Item>
+          <Form.Item label="瞳距（近）" name="pd_near">
+            <Input placeholder="如 60" />
+          </Form.Item>
+          <Form.Item label="瞳距（远）" name="pd_far">
+            <Input placeholder="如 62" />
+          </Form.Item>
+          {/* 按 IMPLEMENTATION.md Phase 4 / 1.2：复查周期，默认 90 天 */}
+          <Form.Item
+            label="复查周期（天）"
+            name="review_cycle_days"
+            rules={[{ required: true, message: '请输入复查周期' }]}
+            extra={`默认 ${DEFAULT_REVIEW_CYCLE_DAYS} 天（3 个月）`}
           >
-            {opticalOperators.map((op) => (
-              <Select.Option key={op.id} value={op.name}>
-                {op.name}
-              </Select.Option>
-            ))}
-          </Select>
-        </Form.Item>
-      </Form>,
+            <InputNumber min={1} step={1} precision={0} style={{ width: '100%' }} placeholder="复查周期天数" />
+          </Form.Item>
+          {/* 按 IMPLEMENTATION.md Phase 4 / 1.6：备注显式列 */}
+          <Form.Item label="备注" name="notes">
+            <Input.TextArea rows={2} placeholder="选填" />
+          </Form.Item>
+          <Form.Item label="登记人" name="operator" rules={[{ required: true, message: '请选择登记人' }]}>
+            <Select
+              placeholder={opLoading ? '加载中...' : '请选择登记人（仅配镜部）'}
+              loading={opLoading}
+              allowClear
+            >
+              {opticalOperators.map((op) => (
+                <Select.Option key={op.id} value={op.name}>
+                  {op.name}
+                </Select.Option>
+              ))}
+            </Select>
+          </Form.Item>
+        </Form>
+      </div>,
     ];
     return steps.map((node, i) => (
       <div key={i} style={{ display: i === current ? 'block' : 'none' }}>
@@ -247,7 +336,7 @@ export default function PrescriptionWizard() {
         current={current}
         size="small"
         style={{ marginBottom: 24 }}
-        items={STEP_TITLES.map((t) => ({ title: t }))}
+        items={PAGE_TITLES.map((t) => ({ title: t }))}
       />
 
       <Spin spinning={submitting} tip="提交中...">
@@ -260,7 +349,27 @@ export default function PrescriptionWizard() {
         </Button>
         <Space>
           <Button onClick={() => navigate('/')}>取消</Button>
-          {current < STEP_TITLES.length - 1 ? (
+          {/* 按 IMPLEMENTATION.md Phase 4：办卡跳转按钮，放在"下一步"按钮之前 */}
+          {current === 0 && (
+            <Tooltip
+              title={
+                memberMatch
+                  ? '该手机号已有会员，无需办卡'
+                  : !canGoRegister
+                    ? '请先填写姓名和手机号'
+                    : '该客户非会员，可跳转办理会员卡'
+              }
+            >
+              <Button
+                icon={<UserAddOutlined />}
+                disabled={!canGoRegister}
+                onClick={handleGoRegister}
+              >
+                办卡
+              </Button>
+            </Tooltip>
+          )}
+          {current < PAGE_TITLES.length - 1 ? (
             <Button type="primary" onClick={next}>
               下一步
             </Button>

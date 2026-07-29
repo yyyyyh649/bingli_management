@@ -55,11 +55,12 @@ router.get('/search', (req, res) => {
       )
       .all(q, `%${q}`, `%${q}`, q);
   } else {
+    // 按 IMPLEMENTATION.md Phase 4：非数字关键词支持按姓名 + 会员卡号搜索
     rows = db
       .prepare(
-        `SELECT * FROM customers WHERE name LIKE ? ORDER BY name ASC LIMIT 100`
+        `SELECT * FROM customers WHERE name LIKE ? OR member_card_no LIKE ? ORDER BY name ASC LIMIT 100`
       )
-      .all(`%${q}%`);
+      .all(`%${q}%`, `%${q}%`);
   }
   res.json(ok(rows));
 });

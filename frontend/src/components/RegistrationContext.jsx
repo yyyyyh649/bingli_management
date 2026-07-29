@@ -13,9 +13,11 @@ const { Text } = Typography;
 //   1. 会员信息区：是否会员、余额/积分，按钮=跳会员详情 / 一键办卡
 //   2. 客户历史区：该人过往验光/病历，可跳历史结果
 //
-// props: { name, phone, onPrefillRegister }
+// props: { name, phone, onPrefillRegister, onMemberChange }
 //   onPrefillRegister: 点击"一键办卡"时回调，用于带入已填数据跳转会员登记
-export default function RegistrationContext({ name, phone, onPrefillRegister }) {
+//   onMemberChange:    (member|null) => void，会员匹配结果变化时通知父级
+//                      按 IMPLEMENTATION.md Phase 4：父级据此控制"办卡跳转按钮"可点/禁用
+export default function RegistrationContext({ name, phone, onPrefillRegister, onMemberChange }) {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState(null);
@@ -30,6 +32,7 @@ export default function RegistrationContext({ name, phone, onPrefillRegister }) 
     if (!hasName && !hasPhone) {
       setData(null);
       setSearched(false);
+      onMemberChange?.(null);
       return;
     }
     if (timerRef.current) clearTimeout(timerRef.current);
@@ -39,8 +42,10 @@ export default function RegistrationContext({ name, phone, onPrefillRegister }) 
         const ctx = await getRegistrationContext({ name: qName, phone: qPhone });
         setData(ctx);
         setSearched(true);
+        onMemberChange?.(ctx?.member || null);
       } catch (e) {
         // 拦截器已提示
+        onMemberChange?.(null);
       } finally {
         setLoading(false);
       }

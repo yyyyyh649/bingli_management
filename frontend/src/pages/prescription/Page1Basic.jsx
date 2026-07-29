@@ -6,11 +6,12 @@ import PhoneInput, { phoneValidator } from '../../components/PhoneInput.jsx';
 import CandidatePicker from '../../components/CandidatePicker.jsx';
 import RegistrationContext from '../../components/RegistrationContext.jsx';
 
-// 验光单向导 - 第1步：基本信息
+// 验光单向导 - 第1页：基本信息（按 IMPLEMENTATION.md Phase 4 两页化）
 // 表单实例由父级 Wizard 传入
 // 按 IMPLEMENTATION.md Phase 2 / 1.5：本页内嵌候选列表，店员选择后写入隐藏字段 customerRefId
 // 按 IMPLEMENTATION.md Phase 3：本页内嵌双区（会员信息 + 客户历史）
-export default function Page1Basic({ form }) {
+// 按 IMPLEMENTATION.md Phase 4：onMemberChange 上报会员匹配结果，父级控制办卡按钮可点/禁用
+export default function Page1Basic({ form, onMemberChange }) {
   const navigate = useNavigate();
   const name = Form.useWatch('name', form);
   const phone = Form.useWatch('phone', form);
@@ -88,6 +89,7 @@ export default function Page1Basic({ form }) {
           name={name}
           phone={phone}
           onPrefillRegister={handlePrefillRegister}
+          onMemberChange={onMemberChange}
         />
       </div>
     </Form>

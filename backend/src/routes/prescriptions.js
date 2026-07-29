@@ -56,6 +56,8 @@ router.post(
       pointsEarned = null,        // 本次新增积分（店员可修改，null=自动按实付取整）
       // 按 IMPLEMENTATION.md 1.5 / Phase 2：店员在候选列表选择的客户标识
       customerRefId = '',
+      // 按 IMPLEMENTATION.md Phase 4 / 1.2：复查周期与备注（显式列，两页化后由第2页提交）
+      reviewCycleDays = null,
     } = req.body || {};
 
     const db = getDb();
@@ -136,9 +138,11 @@ router.post(
       customer_name: customerName,
       // 按 IMPLEMENTATION.md 1.5 / Phase 2：店员选了候选 → 继承其 refId；未选 → 自引用（id）
       customer_ref_id: providedRefId || id,
-      review_cycle_days: Number(page1.review_cycle_days) || 90,
+      // 按 IMPLEMENTATION.md Phase 4 / 1.2：复查周期优先取顶层 reviewCycleDays（两页化后由第2页提交），
+      // 兼容旧版 page1.review_cycle_days
+      review_cycle_days: Number(reviewCycleDays != null ? reviewCycleDays : page1.review_cycle_days) || 90,
       gender,
-      notes: String(page1.notes || req.body?.notes || '').trim(),
+      notes: String(req.body?.notes || page1.notes || '').trim(),
       page1: JSON.stringify(page1),
       od_ds: JSON.stringify(od_ds),
       od_dc: JSON.stringify(od_dc),
