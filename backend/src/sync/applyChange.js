@@ -4,7 +4,8 @@ import { SYNC_STATUS } from '@optical/shared/constants.js';
 
 // 各同步表的可写字段白名单（与 schema 一致，防注入）
 const TABLE_FIELDS = {
-  customers: ['id', 'phone', 'name', 'member_card_no', 'address', 'store', 'operator', 'balance', 'created_at', 'updated_at', 'sync_status'],
+  // 按 IMPLEMENTATION.md Phase 0 Bug-2 调整：补全 review_* 字段，避免跨店同步丢失复查信息
+  customers: ['id', 'phone', 'name', 'member_card_no', 'address', 'store', 'operator', 'balance', 'review_cycle_days', 'review_contact_status', 'review_contact_note', 'review_contact_updated_at', 'created_at', 'updated_at', 'sync_status'],
   points_ledger: ['id', 'customer_phone', 'amount', 'source_type', 'related_prescription_id', 'note', 'store', 'operator', 'created_at', 'sync_status'],
   balance_ledger: ['id', 'customer_phone', 'amount', 'source_type', 'related_prescription_id', 'note', 'store', 'operator', 'created_at', 'sync_status'],
   cases: ['id', 'mode', 'customer_name', 'customer_phone', 'customer_gender', 'customer_address', 'condition', 'answers', 'record_date', 'store', 'operator', 'created_at', 'updated_at', 'sync_status'],
@@ -36,8 +37,8 @@ function applyCustomerUpsert(db, payload) {
     if (remote.updated_at && local.updated_at && remote.updated_at > local.updated_at) {
       // 远端较新，更新本地记录（保留本地 id 以免分裂）
       db.prepare(
-        `UPDATE customers SET name = ?, member_card_no = ?, address = ?, balance = ?, updated_at = ?, sync_status = ? WHERE id = ?`
-      ).run(remote.name, remote.member_card_no, remote.address, remote.balance ?? 0, remote.updated_at, SYNC_STATUS.SYNCED, local.id);
+        `UPDATE customers SET name = ?, member_card_no = ?, address = ?, balance = ?, review_cycle_days = ?, review_contact_status = ?, review_contact_note = ?, review_contact_updated_at = ?, updated_at = ?, sync_status = ? WHERE id = ?`
+      ).run(remote.name, remote.member_card_no, remote.address, remote.balance ?? 0, remote.review_cycle_days ?? 90, remote.review_contact_status ?? 'pending', remote.review_contact_note ?? '', remote.review_contact_updated_at ?? '', remote.updated_at, SYNC_STATUS.SYNCED, local.id);
     }
     // 否则丢弃远端（本地较新）
     return;

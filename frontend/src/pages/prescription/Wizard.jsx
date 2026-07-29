@@ -188,51 +188,50 @@ export default function PrescriptionWizard() {
     setOriginalAmount(0);
   };
 
+  // 按 IMPLEMENTATION.md Phase 0 Bug-1 调整：
+  // 原先用 switch 只渲染当前 step，切换步骤时上一步组件被卸载，
+  // 导致 antd Form 的 getFieldsValue() 在最后一步取不到已卸载组件的字段值（眼部数据丢失）。
+  // 改为渲染所有步骤、用 CSS display 控制显隐，确保所有 Form.Item 始终挂载，字段值始终可取。
   const renderStep = () => {
-    switch (current) {
-      case 0:
-        return <Page1Basic form={page1Form} />;
-      case 1:
-        return <PageEye form={odDsForm} eye="od" rxType="ds" />;
-      case 2:
-        return <PageEye form={odDcForm} eye="od" rxType="dc" />;
-      case 3:
-        return <PageEye form={osDsForm} eye="os" rxType="ds" />;
-      case 4:
-        return <PageEye form={osDcForm} eye="os" rxType="dc" />;
-      case 5:
-        return (
-          <Form form={page6Form} layout="vertical" style={{ maxWidth: 560 }}>
-            <Form.Item label="镜片价（元）" name="lens_price" rules={[{ required: true, message: '请输入镜片价' }]}>
-              <InputNumber min={0} style={{ width: '100%' }} placeholder="数字" />
-            </Form.Item>
-            <Form.Item label="镜架价（元）" name="frame_price" rules={[{ required: true, message: '请输入镜架价' }]}>
-              <InputNumber min={0} style={{ width: '100%' }} placeholder="数字" />
-            </Form.Item>
-            <Form.Item label="瞳距（近）" name="pd_near">
-              <Input placeholder="如 60" />
-            </Form.Item>
-            <Form.Item label="瞳距（远）" name="pd_far">
-              <Input placeholder="如 62" />
-            </Form.Item>
-            <Form.Item label="登记人" name="operator" rules={[{ required: true, message: '请选择登记人' }]}>
-              <Select
-                placeholder={opLoading ? '加载中...' : '请选择登记人（仅配镜部）'}
-                loading={opLoading}
-                allowClear
-              >
-                {opticalOperators.map((op) => (
-                  <Select.Option key={op.id} value={op.name}>
-                    {op.name}
-                  </Select.Option>
-                ))}
-              </Select>
-            </Form.Item>
-          </Form>
-        );
-      default:
-        return null;
-    }
+    const steps = [
+      <Page1Basic form={page1Form} />,
+      <PageEye form={odDsForm} eye="od" rxType="ds" />,
+      <PageEye form={odDcForm} eye="od" rxType="dc" />,
+      <PageEye form={osDsForm} eye="os" rxType="ds" />,
+      <PageEye form={osDcForm} eye="os" rxType="dc" />,
+      <Form form={page6Form} layout="vertical" style={{ maxWidth: 560 }}>
+        <Form.Item label="镜片价（元）" name="lens_price" rules={[{ required: true, message: '请输入镜片价' }]}>
+          <InputNumber min={0} style={{ width: '100%' }} placeholder="数字" />
+        </Form.Item>
+        <Form.Item label="镜架价（元）" name="frame_price" rules={[{ required: true, message: '请输入镜架价' }]}>
+          <InputNumber min={0} style={{ width: '100%' }} placeholder="数字" />
+        </Form.Item>
+        <Form.Item label="瞳距（近）" name="pd_near">
+          <Input placeholder="如 60" />
+        </Form.Item>
+        <Form.Item label="瞳距（远）" name="pd_far">
+          <Input placeholder="如 62" />
+        </Form.Item>
+        <Form.Item label="登记人" name="operator" rules={[{ required: true, message: '请选择登记人' }]}>
+          <Select
+            placeholder={opLoading ? '加载中...' : '请选择登记人（仅配镜部）'}
+            loading={opLoading}
+            allowClear
+          >
+            {opticalOperators.map((op) => (
+              <Select.Option key={op.id} value={op.name}>
+                {op.name}
+              </Select.Option>
+            ))}
+          </Select>
+        </Form.Item>
+      </Form>,
+    ];
+    return steps.map((node, i) => (
+      <div key={i} style={{ display: i === current ? 'block' : 'none' }}>
+        {node}
+      </div>
+    ));
   };
 
   return (
