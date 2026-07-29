@@ -272,6 +272,26 @@ router.get('/registration-context', (req, res) => {
   res.json(ok({ member, history }));
 });
 
+// 按 IMPLEMENTATION.md Phase 5：今日生日提醒
+// 返回今日过生日的会员列表，含登记人字段（便于登记人亲自联系）
+router.get('/birthdays-today', (req, res) => {
+  const db = getDb();
+  const today = todayDate();
+  // birthday 格式 YYYY-MM-DD，取月日部分比较
+  const monthDay = today.slice(5); // MM-DD
+  const rows = db
+    .prepare(
+      `SELECT id, name, phone, member_card_no, birthday, operator, store, created_at
+       FROM customers
+       WHERE birthday IS NOT NULL
+         AND birthday != ''
+         AND substr(birthday, 6) = ?
+       ORDER BY name ASC`
+    )
+    .all(monthDay);
+  res.json(ok({ date: today, birthdays: rows }));
+});
+
 // 复查提醒：分开返回 配镜部(验光单) / 眼科部(病例) 到期未复查客户
 // 按 IMPLEMENTATION.md Phase 2 / 红线规则4：按 customer_ref_id 分组，同类记录取最近一条；验光单与病历分开算
 router.get('/review-reminders', (req, res) => {
@@ -499,12 +519,14 @@ router.post(
   })
 );
 
-// 修改
+// 修改（按 IMPLEMENTATION.md Phase 5 / 红线规则1：编辑个人信息需密码校验）
 router.put(
   '/:id',
   asyncHandler(async (req, res) => {
     const { id } = req.params;
-    const { name, memberCardNo, address } = req.body || {};
+    const { name, memberCardNo, address, password } = req.body || {};
+    // 按 IMPLEMENTATION.md 红线规则1：修改需密码验证
+    if (!checkDeletePassword(password)) throw new ApiError('密码错误', 403);
     const db = getDb();
     const existing = db.prepare('SELECT * FROM customers WHERE id = ?').get(id);
     if (!existing) throw new ApiError('客户不存在', 404);

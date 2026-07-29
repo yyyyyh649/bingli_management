@@ -101,6 +101,7 @@ export default function Operators() {
         name: values.name,
         sortOrder: values.sortOrder ?? 0,
         department: deptArrToStr(values.department || []),
+        password: values.password,
       });
       message.success('修改成功');
       setEditModal({ open: false, record: null });
@@ -226,6 +227,14 @@ export default function Operators() {
           </Form.Item>
           <Form.Item label="排序（数字越小越靠前）" name="sortOrder">
             <InputNumber min={0} style={{ width: '100%' }} />
+          </Form.Item>
+          {/* 按 IMPLEMENTATION.md Phase 5 / 红线规则1：修改需密码 */}
+          <Form.Item
+            label="密码"
+            name="password"
+            rules={[{ required: true, message: '请输入密码' }]}
+          >
+            <Input.Password placeholder="请输入密码" autoFocus />
           </Form.Item>
         </Form>
       </Modal>

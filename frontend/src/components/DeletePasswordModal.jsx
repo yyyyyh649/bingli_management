@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import { Modal, Input, Form } from 'antd';
-import { DEFAULT_DELETE_PASSWORD } from '@optical/shared/constants.js';
 
-// 通用删除密码 Modal，多处复用
+// 通用密码确认 Modal，多处复用（删除/编辑均用）
+// 按 IMPLEMENTATION.md 红线规则1：永不显示默认密码（前端不渲染明文默认值）
 // onOk(password) 返回 Promise
 export default function DeletePasswordModal({
   open,
   title = '删除确认',
-  content = '此操作不可撤销，请输入删除密码以确认',
+  content = '此操作不可撤销，请输入密码以确认',
+  okText = '确认删除',
   onOk,
   onCancel,
 }) {
@@ -37,7 +38,7 @@ export default function DeletePasswordModal({
     <Modal
       open={open}
       title={title}
-      okText="确认删除"
+      okText={okText}
       cancelText="取消"
       okButtonProps={{ danger: true }}
       confirmLoading={confirmLoading}
@@ -49,11 +50,11 @@ export default function DeletePasswordModal({
       <Form form={form} layout="vertical">
         <Form.Item
           name="password"
-          label="删除密码"
-          rules={[{ required: true, message: '请输入删除密码' }]}
+          label="密码"
+          rules={[{ required: true, message: '请输入密码' }]}
         >
           <Input.Password
-            placeholder={`默认密码：${DEFAULT_DELETE_PASSWORD}`}
+            placeholder="请输入密码"
             autoFocus
           />
         </Form.Item>

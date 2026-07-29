@@ -72,7 +72,9 @@ router.put(
   '/:id',
   asyncHandler(async (req, res) => {
     const { id } = req.params;
-    const { name, sortOrder, department } = req.body || {};
+    const { name, sortOrder, department, password } = req.body || {};
+    // 按 IMPLEMENTATION.md Phase 5 / 红线规则1：修改旧记录必须密码验证
+    if (!checkDeletePassword(password)) throw new ApiError('密码错误', 403);
     const db = getDb();
     const existing = db.prepare('SELECT * FROM operators WHERE id = ?').get(id);
     if (!existing) throw new ApiError('登记人不存在', 404);

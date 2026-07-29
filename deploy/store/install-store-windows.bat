@@ -86,6 +86,14 @@ set PORT=3000
 set /p PORT_INPUT="请输入本地端口（直接回车默认 3000）: "
 if not "!PORT_INPUT!"=="" set PORT=!PORT_INPUT!
 
+REM 按 IMPLEMENTATION.md 红线规则1：删除/修改密码由部署方自定义，脚本不硬编码默认值
+set DELETE_PASSWORD=
+set /p DELETE_PASSWORD="请输入删除/修改记录密码 DELETE_PASSWORD（留空则随机生成）: "
+if "!DELETE_PASSWORD!"=="" (
+  for /f "delims=" %%p in ('powershell -NoProfile -Command "[Convert]::ToBase64String((1..9 ^| %% {[byte](Get-Random -Max 256)})).Substring(0,12)"') do set DELETE_PASSWORD=%%p
+  echo [警告] 未设置 DELETE_PASSWORD，已随机生成：!DELETE_PASSWORD!（请妥善保存，系统不会再次显示）
+)
+
 REM ---------- 部署目录 ----------
 set INSTALL_DIR=C:\optical-store
 echo [INFO] 部署目录：!INSTALL_DIR!
@@ -134,7 +142,7 @@ echo [INFO] 生成 backend\.env...
   echo STORE_ID=!STORE_ID!
   echo PORT=!PORT!
   echo DB_PATH=!INSTALL_DIR!\backend\data\local.db
-  echo DELETE_PASSWORD=safe@safe
+  echo DELETE_PASSWORD=!DELETE_PASSWORD!
   echo.
   echo CLOUD_SERVER_URL=!CLOUD_URL!
   echo SYNC_INTERVAL_MS=5000
@@ -166,7 +174,7 @@ nssm remove !SERVICE_NAME! confirm >nul 2>&1
 
 nssm install !SERVICE_NAME! "!NODE_EXE!" "src\index.js"
 nssm set !SERVICE_NAME! AppDirectory "!INSTALL_DIR!\backend"
-nssm set !SERVICE_NAME! AppEnvironmentExtra "STORE_ID=!STORE_ID!" "PORT=!PORT!" "DB_PATH=!INSTALL_DIR!\backend\data\local.db" "DELETE_PASSWORD=safe@safe" "CLOUD_SERVER_URL=!CLOUD_URL!" "SYNC_SECRET=!SYNC_SECRET!" "SYNC_ENABLED=true" "SYNC_INTERVAL_MS=5000"
+nssm set !SERVICE_NAME! AppEnvironmentExtra "STORE_ID=!STORE_ID!" "PORT=!PORT!" "DB_PATH=!INSTALL_DIR!\backend\data\local.db" "DELETE_PASSWORD=!DELETE_PASSWORD!" "CLOUD_SERVER_URL=!CLOUD_URL!" "SYNC_SECRET=!SYNC_SECRET!" "SYNC_ENABLED=true" "SYNC_INTERVAL_MS=5000"
 nssm set !SERVICE_NAME! Start SERVICE_AUTO_START
 nssm set !SERVICE_NAME! Description "眼镜店登记管理系统 - !STORE_ID!"
 nssm set !SERVICE_NAME! AppStdout "!INSTALL_DIR!\backend\data\service.log"

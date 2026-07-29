@@ -7,6 +7,7 @@ import {
   TeamOutlined,
   DownloadOutlined,
   BarChartOutlined,
+  WalletOutlined,
 } from '@ant-design/icons';
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
 
@@ -37,6 +38,12 @@ const menuItems = [
     key: '/admin/performance',
     icon: <BarChartOutlined />,
     label: <Link to="/admin/performance">配镜部绩效</Link>,
+  },
+  // 按 IMPLEMENTATION.md Phase 5：每日积分/余额消耗明细及办理人
+  {
+    key: '/admin/daily-ledger',
+    icon: <WalletOutlined />,
+    label: <Link to="/admin/daily-ledger">每日明细</Link>,
   },
 ];
 

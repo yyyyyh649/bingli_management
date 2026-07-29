@@ -33,6 +33,8 @@ STORE_ID="${STORE_ID:-}"
 CLOUD_URL="${CLOUD_URL:-}"
 SYNC_SECRET="${SYNC_SECRET:-}"
 PORT="${PORT:-3000}"
+# 按 IMPLEMENTATION.md 红线规则1：删除/修改密码由部署方自定义，脚本不硬编码默认值
+DELETE_PASSWORD="${DELETE_PASSWORD:-}"
 
 # ---------- 1. 收集参数 ----------
 [[ -n "$STORE_ID" ]] || read -rp "请输入 STORE_ID（仅限英文字母和数字，例如 store1 / store2）: " STORE_ID
@@ -45,6 +47,12 @@ PORT="${PORT:-3000}"
 
 [[ -n "$SYNC_SECRET" ]] || read -rp "请输入 SYNC_SECRET（与云端一致）: " SYNC_SECRET
 [[ -n "$SYNC_SECRET" ]] || fatal "SYNC_SECRET 必填"
+
+# 删除/修改密码：部署方自定义，留空则随机生成一个并回显（系统永不显示默认密码）
+if [[ -z "$DELETE_PASSWORD" ]]; then
+  DELETE_PASSWORD="$(head -c 12 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 12)"
+  warn "未设置 DELETE_PASSWORD，已随机生成：$DELETE_PASSWORD（请妥善保存，系统不会再次显示）"
+fi
 
 [[ "$CLOUD_URL" == https://* ]] || warn "建议使用 HTTPS 域名访问云端，避免密钥明文传输"
 
@@ -91,7 +99,7 @@ cat > "$INSTALL_DIR/backend/.env" <<EOF
 STORE_ID=$STORE_ID
 PORT=$PORT
 DB_PATH=$INSTALL_DIR/backend/data/local.db
-DELETE_PASSWORD=safe@safe
+DELETE_PASSWORD=$DELETE_PASSWORD
 
 CLOUD_SERVER_URL=$CLOUD_URL
 SYNC_INTERVAL_MS=5000

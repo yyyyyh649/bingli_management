@@ -25,6 +25,8 @@ import AdminDelete from './pages/admin/DeleteRecords.jsx';
 import AdminOperators from './pages/admin/Operators.jsx';
 import AdminExport from './pages/admin/Export.jsx';
 import AdminPerformance from './pages/admin/Performance.jsx';
+import AdminDailyLedger from './pages/admin/DailyLedger.jsx';
+import GlobalReminders from './components/GlobalReminders.jsx';
 import NotFound from './pages/NotFound.jsx';
 
 const { Header, Content } = Layout;
@@ -111,6 +113,8 @@ export default function App() {
             items={items}
             style={{ flex: 1, borderBottom: 'none' }}
           />
+          {/* 按 IMPLEMENTATION.md Phase 5：全站各页提示（今日生日 + 复查超期） */}
+          <GlobalReminders />
         </Header>
       )}
       <Content
@@ -136,6 +140,7 @@ export default function App() {
             <Route path="delete" element={<AdminDelete />} />
             <Route path="operators" element={<AdminOperators />} />
             <Route path="performance" element={<AdminPerformance />} />
+            <Route path="daily-ledger" element={<AdminDailyLedger />} />
             <Route path="export" element={<AdminExport />} />
           </Route>
           <Route path="*" element={<NotFound />} />

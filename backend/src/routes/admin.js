@@ -5,10 +5,46 @@ import { getDb } from '../db.js';
 import { createReadStream, statSync, unlinkSync } from 'node:fs';
 import { resolve } from 'node:path';
 import * as XLSX from 'xlsx';
-import { PRESCRIPTION_STEPS, PRESCRIPTION_STEP_LABELS } from '@optical/shared/constants.js';
+import { PRESCRIPTION_STEPS, PRESCRIPTION_STEP_LABELS, todayDate } from '@optical/shared/constants.js';
 import { EYE_EXAM_ITEMS } from '@optical/shared/questionnaire.js';
 
 const router = Router();
+
+// 按 IMPLEMENTATION.md Phase 5：每日积分/余额消耗明细及办理人
+// 默认今日，可切日期；列出每笔变动的时间/会员/金额/类型/办理人
+router.get('/daily-ledger', (req, res) => {
+  const db = getDb();
+  // 按 IMPLEMENTATION.md 红线规则9：created_at 为北京时间字符串（YYYY-MM-DDTHH:mm:ss）
+  // 取 created_at 的日期部分与指定日期比较
+  const date = String(req.query.date || todayDate()).trim();
+  // 关联查客户姓名
+  const points = db
+    .prepare(
+      `SELECT p.id, p.customer_phone, p.amount, p.source_type, p.note, p.store, p.operator,
+              p.created_at, c.name AS customer_name
+       FROM points_ledger p
+       LEFT JOIN customers c ON c.phone = p.customer_phone
+       WHERE substr(p.created_at, 1, 10) = ?
+       ORDER BY p.created_at DESC`
+    )
+    .all(date);
+  const balance = db
+    .prepare(
+      `SELECT b.id, b.customer_phone, b.amount, b.source_type, b.note, b.store, b.operator,
+              b.created_at, c.name AS customer_name
+       FROM balance_ledger b
+       LEFT JOIN customers c ON c.phone = b.customer_phone
+       WHERE substr(b.created_at, 1, 10) = ?
+       ORDER BY b.created_at DESC`
+    )
+    .all(date);
+
+  // 汇总
+  const pointsTotal = points.reduce((s, r) => s + Number(r.amount || 0), 0);
+  const balanceTotal = balance.reduce((s, r) => s + Number(r.amount || 0), 0);
+
+  res.json(ok({ date, points, balance, pointsTotal, balanceTotal }));
+});
 
 // 删除日志列表
 router.get('/delete-logs', (req, res) => {

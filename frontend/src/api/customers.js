@@ -28,12 +28,13 @@ export function createCustomer({ phone, name, memberCardNo, address, operator, b
   return client.post('/customers', body);
 }
 
-// 修改客户
-export function updateCustomer(id, { name, memberCardNo, address }) {
+// 修改客户（按 IMPLEMENTATION.md Phase 5 / 红线规则1：编辑需密码）
+export function updateCustomer(id, { name, memberCardNo, address, password }) {
   const body = {};
   if (name !== undefined) body.name = name;
   if (memberCardNo !== undefined) body.memberCardNo = memberCardNo;
   if (address !== undefined) body.address = address;
+  body.password = password || '';
   return client.put(`/customers/${id}`, body);
 }
 

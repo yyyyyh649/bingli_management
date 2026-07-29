@@ -20,7 +20,7 @@ import {
 } from 'antd';
 import { EditOutlined, WalletOutlined, BellOutlined } from '@ant-design/icons';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getCustomerProfile, updateCustomerReview } from '../../api/customers.js';
+import { getCustomerProfile, updateCustomer, updateCustomerReview } from '../../api/customers.js';
 import { createBalance } from '../../api/balance.js';
 import { useOperators } from '../../api/operators.js';
 import { BALANCE_SOURCE, DEFAULT_REVIEW_CYCLE_DAYS, REVIEW_CONTACT_STATUS, REVIEW_CONTACT_STATUS_LABELS } from '@optical/shared/constants.js';
@@ -42,6 +42,10 @@ export default function CustomerProfile() {
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [reviewForm] = Form.useForm();
+  // 按 IMPLEMENTATION.md Phase 5 / 红线规则1：编辑个人信息需密码
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editSubmitting, setEditSubmitting] = useState(false);
+  const [editForm] = Form.useForm();
   const { operators } = useOperators();
 
   const load = async () => {
@@ -112,6 +116,36 @@ export default function CustomerProfile() {
     setReviewModalOpen(true);
   };
 
+  // 按 IMPLEMENTATION.md Phase 5 / 红线规则1：编辑个人信息，需密码校验
+  const openEditModal = () => {
+    editForm.setFieldsValue({
+      name: customer?.name || '',
+      memberCardNo: customer?.member_card_no || '',
+      address: customer?.address || '',
+    });
+    setEditModalOpen(true);
+  };
+
+  const handleEditSubmit = async () => {
+    try {
+      const values = await editForm.validateFields();
+      setEditSubmitting(true);
+      await updateCustomer(customer.id, {
+        name: values.name,
+        memberCardNo: values.memberCardNo,
+        address: values.address,
+        password: values.password,
+      });
+      message.success('个人信息已更新');
+      setEditModalOpen(false);
+      await load();
+    } catch (e) {
+      // 校验失败或 API 错误
+    } finally {
+      setEditSubmitting(false);
+    }
+  };
+
   const handleReviewSubmit = async () => {
     try {
       const values = await reviewForm.validateFields();
@@ -154,7 +188,13 @@ export default function CustomerProfile() {
       <Card
         title="个人信息"
         extra={
-          <Space>
+          <Space wrap>
+            <Button
+              icon={<EditOutlined />}
+              onClick={openEditModal}
+            >
+              编辑信息
+            </Button>
             <Button
               icon={<WalletOutlined />}
               onClick={() => openBalanceModal('topup')}
@@ -376,6 +416,45 @@ export default function CustomerProfile() {
           </Form.Item>
           <Form.Item label="联系备注" name="reviewContactNote">
             <Input.TextArea rows={2} placeholder="选填，如：已电话通知、客户答应下周来等" />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* 按 IMPLEMENTATION.md Phase 5 / 红线规则1：编辑个人信息，需密码校验 */}
+      <Modal
+        open={editModalOpen}
+        title="编辑个人信息"
+        okText="保存"
+        cancelText="取消"
+        onOk={handleEditSubmit}
+        onCancel={() => setEditModalOpen(false)}
+        confirmLoading={editSubmitting}
+        destroyOnClose
+      >
+        <div style={{ marginBottom: 16, color: '#888' }}>
+          客户：{customer.name || '-'}（{customer.phone || phone}）
+        </div>
+        <Form form={editForm} layout="vertical">
+          <Form.Item
+            label="姓名"
+            name="name"
+            rules={[{ required: true, message: '请输入姓名' }]}
+          >
+            <Input placeholder="请输入姓名" />
+          </Form.Item>
+          <Form.Item label="会员卡号" name="memberCardNo">
+            <Input placeholder="选填" />
+          </Form.Item>
+          <Form.Item label="住址" name="address">
+            <Input.TextArea rows={2} placeholder="选填" />
+          </Form.Item>
+          <Form.Item
+            label="密码"
+            name="password"
+            rules={[{ required: true, message: '请输入密码' }]}
+            extra="编辑个人信息需密码验证"
+          >
+            <Input.Password placeholder="请输入密码" />
           </Form.Item>
         </Form>
       </Modal>

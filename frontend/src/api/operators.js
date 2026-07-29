@@ -11,11 +11,12 @@ export function createOperator({ name, sortOrder, department }) {
   return client.post('/operators', body);
 }
 
-export function updateOperator(id, { name, sortOrder, department }) {
+export function updateOperator(id, { name, sortOrder, department, password }) {
   const body = {};
   if (name !== undefined) body.name = name;
   if (sortOrder !== undefined) body.sortOrder = sortOrder;
   if (department !== undefined) body.department = department;
+  if (password !== undefined) body.password = password;
   return client.put(`/operators/${id}`, body);
 }
 
