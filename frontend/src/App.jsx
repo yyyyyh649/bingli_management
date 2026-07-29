@@ -12,7 +12,8 @@ import {
 
 import Home from './pages/Home.jsx';
 import CustomerRegister from './pages/customer/Register.jsx';
-import CustomerSearch from './pages/customer/Search.jsx';
+import MemberSearch from './pages/customer/Search.jsx';
+import CustomerSearch from './pages/customer/CustomerSearch.jsx';
 import CustomerProfile from './pages/customer/Profile.jsx';
 import CaseRegister from './pages/case/Register.jsx';
 import CaseSimpleForm from './pages/case/SimpleForm.jsx';
@@ -47,7 +48,12 @@ export default function App() {
         {
           key: '/customer/search',
           icon: <SearchOutlined />,
-          label: <Link to="/customer/search">查询</Link>,
+          label: <Link to="/customer/search">会员查询</Link>,
+        },
+        {
+          key: '/customer/records',
+          icon: <SearchOutlined />,
+          label: <Link to="/customer/records">客户查询</Link>,
         },
       ],
     },
@@ -74,6 +80,7 @@ export default function App() {
     if (p === '/') return ['/'];
     if (p.startsWith('/admin')) return ['/admin'];
     if (p.startsWith('/customer/register')) return ['/customer/register'];
+    if (p.startsWith('/customer/records')) return ['/customer/records'];
     if (p.startsWith('/customer/search')) return ['/customer/search'];
     if (p.startsWith('/customer/profile')) return ['/customer/search'];
     if (p.startsWith('/case')) return ['/case'];
@@ -116,7 +123,8 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/customer/register" element={<CustomerRegister />} />
-          <Route path="/customer/search" element={<CustomerSearch />} />
+          <Route path="/customer/search" element={<MemberSearch />} />
+          <Route path="/customer/records" element={<CustomerSearch />} />
           <Route path="/customer/profile/:phone" element={<CustomerProfile />} />
           <Route path="/case" element={<CaseRegister />} />
           <Route path="/case/simple" element={<CaseSimpleForm />} />

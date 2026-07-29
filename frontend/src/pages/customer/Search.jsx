@@ -19,7 +19,8 @@ const CONTACT_STATUS_COLOR = {
   visited: 'green',
 };
 
-export default function CustomerSearch() {
+// 按 IMPLEMENTATION.md Phase 3：原"客户查询"改名为"会员查询"（数据源仍为 customers 表）
+export default function MemberSearch() {
   const navigate = useNavigate();
   const [keyword, setKeyword] = useState('');
   const [results, setResults] = useState([]);
@@ -201,10 +202,10 @@ export default function CustomerSearch() {
   const totalOverdue = reminders.optical.length + reminders.ophthalmology.length;
 
   return (
-    <Card title="客户查询">
+    <Card title="会员查询">
       <Space style={{ marginBottom: 16, width: '100%' }} direction="vertical">
         <div style={{ color: '#888', fontSize: 12 }}>
-          支持按 手机号后4位 / 完整手机号 / 姓名 / 会员卡号 查询，系统自动判断。需复查客户自动标红置顶。
+          支持按 手机号后4位 / 完整手机号 / 姓名 / 会员卡号 查询，系统自动判断。需复查会员自动标红置顶。
         </div>
         <Space.Compact style={{ width: '100%', maxWidth: 600 }}>
           <Input
@@ -221,7 +222,7 @@ export default function CustomerSearch() {
       </Space>
 
       {!loading && results.length === 0 ? (
-        <Empty description="未找到匹配客户" />
+        <Empty description="未找到匹配会员" />
       ) : (
         <Table
           rowKey="id"

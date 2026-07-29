@@ -16,11 +16,15 @@ export function getCustomerByPhone(phone) {
 }
 
 // 新建/合并客户
-export function createCustomer({ phone, name, memberCardNo, address, operator }) {
+// 按 IMPLEMENTATION.md 1.4：会员登记需传 birthday/gender/age
+export function createCustomer({ phone, name, memberCardNo, address, operator, birthday, gender, age }) {
   const body = { phone, name };
   if (memberCardNo) body.memberCardNo = memberCardNo;
   if (address) body.address = address;
   if (operator) body.operator = operator;
+  if (birthday) body.birthday = birthday;
+  if (gender) body.gender = gender;
+  if (age != null) body.age = age;
   return client.post('/customers', body);
 }
 
@@ -52,6 +56,16 @@ export function getReviewReminders() {
 // 登记时让店员选择"这是哪个人"（会员匹配 ∪ 客户历史代表），用于确定 customer_ref_id
 export function getCustomerCandidates({ name, phone } = {}) {
   return client.get('/customers/candidates', { params: { name, phone } });
+}
+
+// 按 IMPLEMENTATION.md Phase 3：客户查询页数据（cases+prescriptions 聚合，按姓名分组）
+export function getCustomerRecords(q) {
+  return client.get('/customers/records', { params: { q } });
+}
+
+// 按 IMPLEMENTATION.md Phase 3：登记页双区数据（会员信息 + 客户历史）
+export function getRegistrationContext({ name, phone } = {}) {
+  return client.get('/customers/registration-context', { params: { name, phone } });
 }
 
 // 更新客户复查信息（周期/联系状态/备注）

@@ -1,7 +1,7 @@
 import React from 'react';
 import { Card, Form, Input, Button, Modal, Space, Select, DatePicker } from 'antd';
 import dayjs from 'dayjs';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { createCustomer } from '../../api/customers.js';
 import { useOperators } from '../../api/operators.js';
 import PhoneInput, { phoneValidator } from '../../components/PhoneInput.jsx';
@@ -9,8 +9,23 @@ import PhoneInput, { phoneValidator } from '../../components/PhoneInput.jsx';
 export default function CustomerRegister() {
   const [form] = Form.useForm();
   const navigate = useNavigate();
+  const location = useLocation();
   const { operators, loading: opLoading } = useOperators();
   const [submitting, setSubmitting] = React.useState(false);
+
+  // 按 IMPLEMENTATION.md Phase 4：从验光单"一键办卡"跳转时带入已填数据
+  React.useEffect(() => {
+    const state = location.state;
+    if (state && typeof state === 'object') {
+      const preset = {};
+      if (state.name) preset.name = state.name;
+      if (state.phone) preset.phone = state.phone;
+      if (state.address) preset.address = state.address;
+      if (state.age != null) preset.age = state.age;
+      if (Object.keys(preset).length) form.setFieldsValue(preset);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const onFinish = async (values) => {
     setSubmitting(true);
@@ -20,7 +35,7 @@ export default function CustomerRegister() {
         ...values,
         birthday: values.birthday ? dayjs(values.birthday).format('YYYY-MM-DD') : '',
       };
-      const customer = await createCustomer(payload);
+      await createCustomer(payload);
       const phone = values.phone;
       Modal.confirm({
         title: '登记成功',

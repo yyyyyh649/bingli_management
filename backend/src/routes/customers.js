@@ -141,6 +141,136 @@ router.get('/candidates', (req, res) => {
   res.json(ok(candidates));
 });
 
+// 按 IMPLEMENTATION.md Phase 3：客户查询页数据源
+// 聚合 cases + prescriptions，按 (customer_name, customer_phone) 分组（同一手机号多名 → 多个姓名分组）
+// 含会员与非会员标记；支持按 姓名 / 手机号 / 手机号后四位 搜索
+router.get('/records', (req, res) => {
+  const q = String(req.query.q || '').trim();
+  const db = getDb();
+  const params = [];
+  const conditions = [];
+  if (q) {
+    if (/^\d+$/.test(q)) {
+      // 纯数字 → 手机号精确 / 后4位 LIKE
+      conditions.push('customer_phone = ? OR customer_phone LIKE ?');
+      params.push(q, `%${q}`);
+    } else {
+      conditions.push('customer_name LIKE ?');
+      params.push(`%${q}%`);
+    }
+  }
+  const sql = `
+    SELECT type, id, customer_name, customer_phone, record_date, operator, store, created_at FROM (
+      SELECT 'prescription' AS type, id, customer_name, customer_phone, record_date, operator, store, created_at
+      FROM prescriptions ${conditions.length ? 'WHERE ' + conditions.join(' OR ') : ''}
+      UNION ALL
+      SELECT 'case' AS type, id, customer_name, customer_phone, record_date, operator, store, created_at
+      FROM cases ${conditions.length ? 'WHERE ' + conditions.join(' OR ') : ''}
+    )
+    ORDER BY record_date DESC, created_at DESC
+    LIMIT 500
+  `;
+  // 注意：UNION ALL 内部各自带 WHERE，参数需重复两份
+  const rows = db.prepare(sql).all(...params, ...params);
+
+  // 按 (customer_name, customer_phone) 分组
+  const groupMap = new Map();
+  for (const r of rows) {
+    const key = `${r.customer_name || ''}||${r.customer_phone || ''}`;
+    if (!groupMap.has(key)) {
+      groupMap.set(key, {
+        name: r.customer_name || '',
+        phone: r.customer_phone || '',
+        records: [],
+        last_record_date: r.record_date,
+      });
+    }
+    groupMap.get(key).records.push({
+      type: r.type,
+      id: r.id,
+      record_date: r.record_date,
+      operator: r.operator,
+      store: r.store,
+    });
+  }
+
+  // 批量查会员标记（按手机号）
+  const groups = Array.from(groupMap.values());
+  const phones = [...new Set(groups.map((g) => g.phone).filter(Boolean))];
+  const memberMap = new Map();
+  if (phones.length) {
+    const placeholders = phones.map(() => '?').join(',');
+    const members = db
+      .prepare(`SELECT phone, member_card_no FROM customers WHERE phone IN (${placeholders})`)
+      .all(...phones);
+    for (const m of members) memberMap.set(m.phone, m);
+  }
+  for (const g of groups) {
+    const m = memberMap.get(g.phone);
+    g.is_member = !!m;
+    g.member_card_no = m?.member_card_no || '';
+    g.record_count = g.records.length;
+  }
+
+  // 排序：按最近登记日期倒序
+  groups.sort((a, b) => (b.last_record_date || '').localeCompare(a.last_record_date || ''));
+  res.json(ok(groups));
+});
+
+// 按 IMPLEMENTATION.md Phase 3：登记页双区数据（会员信息 + 客户历史）
+// 用于验光单/病例登记页输入姓名或手机号后，下方同时展示会员信息区与客户历史区
+router.get('/registration-context', (req, res) => {
+  const { name, phone } = req.query;
+  const qName = String(name || '').trim();
+  const qPhone = String(phone || '').trim();
+  const db = getDb();
+
+  // 1. 会员信息：优先按完整手机号精确查，否则按姓名查
+  let member = null;
+  if (qPhone && /^1\d{10}$/.test(qPhone)) {
+    member = db
+      .prepare(
+        `SELECT c.*, COALESCE((SELECT SUM(amount) FROM points_ledger WHERE customer_phone = c.phone), 0) AS points
+         FROM customers c WHERE c.phone = ?`
+      )
+      .get(qPhone);
+  } else if (qName) {
+    member = db
+      .prepare(
+        `SELECT c.*, COALESCE((SELECT SUM(amount) FROM points_ledger WHERE customer_phone = c.phone), 0) AS points
+         FROM customers c WHERE c.name LIKE ? ORDER BY c.updated_at DESC LIMIT 1`
+      )
+      .get(`%${qName}%`);
+  }
+
+  // 2. 客户历史：cases + prescriptions 按 name/phone 匹配，取最近 20 条
+  const conditions = [];
+  const params = [];
+  if (qPhone && /^\d{4,}$/.test(qPhone)) {
+    conditions.push('customer_phone = ?');
+    params.push(qPhone);
+  }
+  if (qName) {
+    conditions.push('customer_name LIKE ?');
+    params.push(`%${qName}%`);
+  }
+  const history = db
+    .prepare(
+      `SELECT type, id, customer_name, customer_phone, record_date, operator FROM (
+        SELECT 'prescription' AS type, id, customer_name, customer_phone, record_date, operator, created_at
+        FROM prescriptions ${conditions.length ? 'WHERE ' + conditions.join(' OR ') : ''}
+        UNION ALL
+        SELECT 'case' AS type, id, customer_name, customer_phone, record_date, operator, created_at
+        FROM cases ${conditions.length ? 'WHERE ' + conditions.join(' OR ') : ''}
+      )
+      ORDER BY record_date DESC, created_at DESC
+      LIMIT 20`
+    )
+    .all(...params, ...params);
+
+  res.json(ok({ member, history }));
+});
+
 // 复查提醒：分开返回 配镜部(验光单) / 眼科部(病例) 到期未复查客户
 // 按 IMPLEMENTATION.md Phase 2 / 红线规则4：按 customer_ref_id 分组，同类记录取最近一条；验光单与病历分开算
 router.get('/review-reminders', (req, res) => {
