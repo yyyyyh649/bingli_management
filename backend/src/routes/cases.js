@@ -45,6 +45,8 @@ router.post(
       answers = [],
       recordDate,
       operator = '',
+      // 按 IMPLEMENTATION.md 1.5 / Phase 2：店员在候选列表选择的客户标识
+      customerRefId = '',
     } = req.body || {};
 
     if (!VALID_MODES.has(mode)) throw new ApiError('mode 必须为 simple 或 complex');
@@ -63,6 +65,10 @@ router.post(
     // 校验登记人必须属于眼科部
     assertOphthalmologyOperator(db, operator);
 
+    // 按 IMPLEMENTATION.md 1.5 / Phase 2：确定 customer_ref_id
+    // 店员选了会员/历史 → 继承该 refId；未选或新建 → 自引用（= 本条记录 id）
+    const providedRefId = String(customerRefId || '').trim();
+
     const id = uuidv4();
     const store = process.env.STORE_ID || 'store1';
     const now = nowISO();
@@ -75,8 +81,8 @@ router.post(
       customer_phone: cleanPhone,
       customer_gender: cleanGender,
       customer_address: String(customerAddress || ''),
-      // 按 IMPLEMENTATION.md 1.2 新增字段：customer_ref_id Phase 1 先自引用，Phase 2 改为候选逻辑
-      customer_ref_id: id,
+      // 按 IMPLEMENTATION.md 1.5 / Phase 2：店员选了候选 → 继承其 refId；未选 → 自引用（id）
+      customer_ref_id: providedRefId || id,
       review_cycle_days: Number(req.body?.reviewCycleDays) || 90,
       condition: String(condition || ''),
       answers:

@@ -64,21 +64,105 @@ router.get('/search', (req, res) => {
   res.json(ok(rows));
 });
 
+// 按 IMPLEMENTATION.md Phase 2：候选列表接口（会员匹配 ∪ 客户历史代表）
+// 用于登记时让店员选择"这是哪个人"，从而确定 customer_ref_id
+router.get('/candidates', (req, res) => {
+  const { name, phone } = req.query;
+  const qName = String(name || '').trim();
+  const qPhone = String(phone || '').trim();
+  if (!qName && !qPhone) return res.json(ok([]));
+  const db = getDb();
+  const candidates = [];
+  const seenRefIds = new Set();
+
+  // 1. 会员系统匹配
+  let members = [];
+  if (qPhone && /^\d+$/.test(qPhone)) {
+    members = db
+      .prepare('SELECT id, name, phone, gender, age, birthday FROM customers WHERE phone = ? OR phone LIKE ? LIMIT 20')
+      .all(qPhone, `%${qPhone}`);
+  } else if (qName) {
+    members = db
+      .prepare('SELECT id, name, phone, gender, age, birthday FROM customers WHERE name LIKE ? LIMIT 20')
+      .all(`%${qName}%`);
+  }
+  for (const m of members) {
+    if (!seenRefIds.has(m.id)) {
+      seenRefIds.add(m.id);
+      candidates.push({
+        refId: m.id,
+        name: m.name,
+        phone: m.phone,
+        source: 'member',
+        gender: m.gender || '',
+        age: m.age,
+        birthday: m.birthday || '',
+      });
+    }
+  }
+
+  // 2. 客户系统历史代表（cases + prescriptions 按 customer_ref_id 去重）
+  const histConditions = [];
+  const histParams = [];
+  if (qPhone && /^\d+$/.test(qPhone)) {
+    histConditions.push('customer_phone = ?');
+    histParams.push(qPhone);
+  }
+  if (qName) {
+    histConditions.push('customer_name LIKE ?');
+    histParams.push(`%${qName}%`);
+  }
+  const histWhere = histConditions.length ? `WHERE ${histConditions.join(' AND ')}` : '';
+  const histSql = `
+    SELECT customer_ref_id, customer_name, customer_phone, MAX(record_date) AS last_record_date
+    FROM (
+      SELECT customer_ref_id, customer_name, customer_phone, record_date FROM cases WHERE customer_ref_id != ''
+      UNION ALL
+      SELECT customer_ref_id, customer_name, customer_phone, record_date FROM prescriptions WHERE customer_ref_id != ''
+    ) ${histWhere}
+    GROUP BY customer_ref_id
+    ORDER BY last_record_date DESC
+    LIMIT 30
+  `;
+  const history = db.prepare(histSql).all(...histParams);
+  for (const h of history) {
+    if (!seenRefIds.has(h.customer_ref_id)) {
+      seenRefIds.add(h.customer_ref_id);
+      candidates.push({
+        refId: h.customer_ref_id,
+        name: h.customer_name,
+        phone: h.customer_phone,
+        source: 'history',
+        lastRecordDate: h.last_record_date,
+      });
+    }
+  }
+
+  res.json(ok(candidates));
+});
+
 // 复查提醒：分开返回 配镜部(验光单) / 眼科部(病例) 到期未复查客户
-// 规则：最近一次记录日期 + review_cycle_days < 今天 → 需复查
+// 按 IMPLEMENTATION.md Phase 2 / 红线规则4：按 customer_ref_id 分组，同类记录取最近一条；验光单与病历分开算
 router.get('/review-reminders', (req, res) => {
   const db = getDb();
   const today = todayDate();
 
-  // 配镜部：基于最近一次验光单
+  // 配镜部：基于 prescriptions 按 customer_ref_id 分组取最近一条
   const optical = db
     .prepare(
-      `SELECT c.*, MAX(p.record_date) AS last_record_date,
-              date(MAX(p.record_date), '+' || COALESCE(c.review_cycle_days, ${DEFAULT_REVIEW_CYCLE_DAYS}) || ' days') AS due_date
-       FROM customers c
-       JOIN prescriptions p ON p.customer_phone = c.phone
-       GROUP BY c.id
-       HAVING due_date IS NOT NULL AND due_date < date(?)`
+      `SELECT p.customer_ref_id, p.customer_name, p.customer_phone, p.record_date AS last_record_date,
+              p.review_cycle_days,
+              date(p.record_date, '+' || COALESCE(p.review_cycle_days, ${DEFAULT_REVIEW_CYCLE_DAYS}) || ' days') AS due_date,
+              c.id AS customer_id, c.review_contact_status, c.review_contact_note
+       FROM prescriptions p
+       LEFT JOIN customers c ON c.phone = p.customer_phone
+       WHERE p.id = (
+         SELECT p2.id FROM prescriptions p2
+         WHERE p2.customer_ref_id = p.customer_ref_id
+         ORDER BY p2.record_date DESC, p2.created_at DESC LIMIT 1
+       )
+       AND date(p.record_date, '+' || COALESCE(p.review_cycle_days, ${DEFAULT_REVIEW_CYCLE_DAYS}) || ' days') < date(?)
+       ORDER BY due_date ASC`
     )
     .all(today)
     .map((r) => {
@@ -90,15 +174,22 @@ router.get('/review-reminders', (req, res) => {
       };
     });
 
-  // 眼科部：基于最近一次病例
+  // 眼科部：基于 cases 按 customer_ref_id 分组取最近一条
   const ophthalmology = db
     .prepare(
-      `SELECT c.*, MAX(cs.record_date) AS last_record_date,
-              date(MAX(cs.record_date), '+' || COALESCE(c.review_cycle_days, ${DEFAULT_REVIEW_CYCLE_DAYS}) || ' days') AS due_date
-       FROM customers c
-       JOIN cases cs ON cs.customer_phone = c.phone
-       GROUP BY c.id
-       HAVING due_date IS NOT NULL AND due_date < date(?)`
+      `SELECT cs.customer_ref_id, cs.customer_name, cs.customer_phone, cs.record_date AS last_record_date,
+              cs.review_cycle_days,
+              date(cs.record_date, '+' || COALESCE(cs.review_cycle_days, ${DEFAULT_REVIEW_CYCLE_DAYS}) || ' days') AS due_date,
+              c.id AS customer_id, c.review_contact_status, c.review_contact_note
+       FROM cases cs
+       LEFT JOIN customers c ON c.phone = cs.customer_phone
+       WHERE cs.id = (
+         SELECT cs2.id FROM cases cs2
+         WHERE cs2.customer_ref_id = cs.customer_ref_id
+         ORDER BY cs2.record_date DESC, cs2.created_at DESC LIMIT 1
+       )
+       AND date(cs.record_date, '+' || COALESCE(cs.review_cycle_days, ${DEFAULT_REVIEW_CYCLE_DAYS}) || ' days') < date(?)
+       ORDER BY due_date ASC`
     )
     .all(today)
     .map((r) => {

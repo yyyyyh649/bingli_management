@@ -60,6 +60,36 @@ export function initDb(opts = {}) {
     try { db.exec(sql); } catch { /* 列已存在，忽略 */ }
   }
 
+  // 按 IMPLEMENTATION.md Phase 2：存量 customer_ref_id 回填（仅执行一次）
+  // 规则：按"同手机号+同姓名"归为一人，组内 created_at 最早的作为代表（自引用），其余指向它
+  const refMigrated = db.prepare("SELECT key FROM sync_state WHERE key = 'customer_ref_migrated'").get();
+  if (!refMigrated) {
+    db.prepare("UPDATE prescriptions SET customer_ref_id = id WHERE customer_ref_id = '' OR customer_ref_id IS NULL").run();
+    db.prepare("UPDATE cases SET customer_ref_id = id WHERE customer_ref_id = '' OR customer_ref_id IS NULL").run();
+    for (const table of ['prescriptions', 'cases']) {
+      const groups = db
+        .prepare(
+          `SELECT customer_phone, customer_name FROM ${table}
+           WHERE customer_phone != '' AND customer_name != ''
+           GROUP BY customer_phone, customer_name HAVING COUNT(*) > 1`
+        )
+        .all();
+      for (const g of groups) {
+        const rep = db
+          .prepare(
+            `SELECT id FROM ${table} WHERE customer_phone = ? AND customer_name = ? ORDER BY created_at ASC LIMIT 1`
+          )
+          .get(g.customer_phone, g.customer_name);
+        if (rep) {
+          db.prepare(
+            `UPDATE ${table} SET customer_ref_id = ? WHERE customer_phone = ? AND customer_name = ?`
+          ).run(rep.id, g.customer_phone, g.customer_name);
+        }
+      }
+    }
+    db.prepare("INSERT INTO sync_state (key, last_seq, last_pull_at) VALUES ('customer_ref_migrated', 0, NULL)").run();
+  }
+
   dbInstance = db;
   return db;
 }

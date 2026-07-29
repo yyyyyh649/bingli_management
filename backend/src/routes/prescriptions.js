@@ -54,6 +54,8 @@ router.post(
       pointsDeductionPhone = '',  // 积分抵扣客户手机号
       paidAmount = 0,             // 实付金额（店员确认/可修改）
       pointsEarned = null,        // 本次新增积分（店员可修改，null=自动按实付取整）
+      // 按 IMPLEMENTATION.md 1.5 / Phase 2：店员在候选列表选择的客户标识
+      customerRefId = '',
     } = req.body || {};
 
     const db = getDb();
@@ -72,6 +74,10 @@ router.post(
 
     // 校验登记人必须属于配镜部
     assertOpticalOperator(db, operator);
+
+    // 按 IMPLEMENTATION.md 1.5 / Phase 2：确定 customer_ref_id
+    // 店员选了会员/历史 → 继承该 refId；未选或新建 → 自引用（= 本条记录 id，见下方赋值）
+    const providedRefId = String(customerRefId || '').trim();
 
     // 原价 = 镜片价 + 镜架价
     const lensPrice = Number(page6.lens_price || 0);
@@ -128,8 +134,8 @@ router.post(
       id,
       customer_phone: phone,
       customer_name: customerName,
-      // 按 IMPLEMENTATION.md 1.2 新增字段：customer_ref_id Phase 1 先自引用，Phase 2 改为候选逻辑
-      customer_ref_id: id,
+      // 按 IMPLEMENTATION.md 1.5 / Phase 2：店员选了候选 → 继承其 refId；未选 → 自引用（id）
+      customer_ref_id: providedRefId || id,
       review_cycle_days: Number(page1.review_cycle_days) || 90,
       gender,
       notes: String(page1.notes || req.body?.notes || '').trim(),

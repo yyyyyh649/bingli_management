@@ -23,6 +23,7 @@ import {
 import { CASE_MODE, DEPARTMENT } from '@optical/shared/constants.js';
 import SurgeryModule from '../../components/SurgeryModule.jsx';
 import PhoneInput, { phoneStatus, phoneHelp } from '../../components/PhoneInput.jsx';
+import CandidatePicker from '../../components/CandidatePicker.jsx';
 
 const { Text, Title } = Typography;
 
@@ -48,6 +49,8 @@ export default function CaseComplexForm() {
     customer_name: '', customer_gender: '', customer_phone: '', customer_address: '',
     operator: '', record_date: dayjs().format('YYYY-MM-DD'),
   });
+  // 按 IMPLEMENTATION.md Phase 2 / 1.5：店员在候选列表选择的客户标识
+  const [customerRefId, setCustomerRefId] = useState('');
 
   // 完整 answers（7 模块数据）
   const [ans, setAns] = useState(INITIAL_COMPLEX_ANSWERS);
@@ -161,6 +164,8 @@ export default function CaseComplexForm() {
         customerGender: basic.customer_gender,
         customerPhone: basic.customer_phone,
         customerAddress: basic.customer_address,
+        // 按 IMPLEMENTATION.md Phase 2 / 1.5：店员选择的客户标识
+        customerRefId: customerRefId || '',
         answers: JSON.stringify(ans),
         recordDate: basic.record_date || dayjs().format('YYYY-MM-DD'),
         operator: basic.operator,
@@ -258,6 +263,14 @@ export default function CaseComplexForm() {
               </Col>
             </Row>
           </Form>
+
+          {/* 按 IMPLEMENTATION.md Phase 2 / 1.5：候选列表，选择本次登记归属的人 */}
+          <CandidatePicker
+            name={basic.customer_name}
+            phone={basic.customer_phone}
+            value={customerRefId}
+            onChange={(refId) => setCustomerRefId(refId || '')}
+          />
 
           {!basicOk && <Text type="secondary">填写完整基本信息后开始问卷</Text>}
           {basicOk && (

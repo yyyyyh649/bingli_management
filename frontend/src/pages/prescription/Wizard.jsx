@@ -105,6 +105,8 @@ export default function PrescriptionWizard() {
     const payload = {
       customer_phone: page1.phone || '',
       customer_name: page1.name || '',
+      // 按 IMPLEMENTATION.md Phase 2 / 1.5：店员在第一页候选列表选择的客户标识
+      customerRefId: page1.customerRefId || '',
       page1,
       od_ds: odDsForm.getFieldsValue(),
       od_dc: odDcForm.getFieldsValue(),

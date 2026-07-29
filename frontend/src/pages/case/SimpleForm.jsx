@@ -6,6 +6,7 @@ import { createCase } from '../../api/cases.js';
 import { useOperators } from '../../api/operators.js';
 import { CASE_MODE, DEPARTMENT } from '@optical/shared/constants.js';
 import PhoneInput, { phoneValidator } from '../../components/PhoneInput.jsx';
+import CandidatePicker from '../../components/CandidatePicker.jsx';
 
 export default function CaseSimpleForm() {
   const [form] = Form.useForm();
@@ -19,6 +20,11 @@ export default function CaseSimpleForm() {
     return depts.includes(DEPARTMENT.OPHTHALMOLOGY);
   });
 
+  // 按 IMPLEMENTATION.md Phase 2 / 1.5：监听姓名/手机号以驱动候选列表
+  const name = Form.useWatch('name', form);
+  const phone = Form.useWatch('phone', form);
+  const customerRefId = Form.useWatch('customerRefId', form);
+
   const onFinish = async (values) => {
     setSubmitting(true);
     try {
@@ -29,6 +35,8 @@ export default function CaseSimpleForm() {
         customerPhone: values.phone,
         customerAddress: values.address,
         condition: values.condition,
+        // 按 IMPLEMENTATION.md Phase 2 / 1.5：店员选择的客户标识
+        customerRefId: values.customerRefId || '',
         recordDate: values.recordDate
           ? dayjs(values.recordDate).format('YYYY-MM-DD')
           : dayjs().format('YYYY-MM-DD'),
@@ -64,7 +72,7 @@ export default function CaseSimpleForm() {
         layout="vertical"
         onFinish={onFinish}
         style={{ maxWidth: 640 }}
-        initialValues={{ gender: '男', recordDate: dayjs() }}
+        initialValues={{ gender: '男', recordDate: dayjs(), customerRefId: '' }}
       >
         <Form.Item label="姓名" name="name" rules={[{ required: true, message: '请输入姓名' }]}>
           <Input placeholder="请输入姓名" />
@@ -89,6 +97,18 @@ export default function CaseSimpleForm() {
         <Form.Item label="住址" name="address">
           <Input.TextArea rows={2} placeholder="选填" />
         </Form.Item>
+
+        {/* 按 IMPLEMENTATION.md Phase 2 / 1.5：候选列表 */}
+        <CandidatePicker
+          name={name}
+          phone={phone}
+          value={customerRefId ?? ''}
+          onChange={(refId) => form.setFieldsValue({ customerRefId: refId || '' })}
+        />
+        <Form.Item name="customerRefId" hidden>
+          <Input />
+        </Form.Item>
+
         <Form.Item label="病情" name="condition" rules={[{ required: true, message: '请输入病情描述' }]}>
           <Input.TextArea rows={4} placeholder="请描述病情" />
         </Form.Item>

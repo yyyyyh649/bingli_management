@@ -48,6 +48,12 @@ export function getReviewReminders() {
   return client.get('/customers/review-reminders');
 }
 
+// 按 IMPLEMENTATION.md Phase 2 / 1.5：候选列表接口
+// 登记时让店员选择"这是哪个人"（会员匹配 ∪ 客户历史代表），用于确定 customer_ref_id
+export function getCustomerCandidates({ name, phone } = {}) {
+  return client.get('/customers/candidates', { params: { name, phone } });
+}
+
 // 更新客户复查信息（周期/联系状态/备注）
 export function updateCustomerReview(id, { reviewCycleDays, reviewContactStatus, reviewContactNote }) {
   const body = {};
