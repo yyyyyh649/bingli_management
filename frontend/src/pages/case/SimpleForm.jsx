@@ -80,10 +80,11 @@ export default function CaseSimpleForm() {
           name="phone"
           hasFeedback
           rules={[
+            { required: true, message: '请输入手机号' },
             { validator: phoneValidator, validateTrigger: 'onChange' },
           ]}
         >
-          <PhoneInput placeholder="选填，11 位手机号" />
+          <PhoneInput placeholder="11 位手机号" />
         </Form.Item>
         <Form.Item label="住址" name="address">
           <Input.TextArea rows={2} placeholder="选填" />

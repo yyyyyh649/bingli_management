@@ -51,6 +51,15 @@ router.post(
 
     const db = getDb();
 
+    // 按 IMPLEMENTATION.md 1.3 必填校验：姓名/手机号/性别必填
+    const cleanName = String(customerName || '').trim();
+    const cleanPhone = customerPhone ? String(customerPhone).trim() : '';
+    const cleanGender = String(customerGender || '').trim();
+    if (!cleanName) throw new ApiError('姓名为必填项');
+    if (!cleanPhone) throw new ApiError('手机号为必填项');
+    if (!/^1\d{10}$/.test(cleanPhone)) throw new ApiError('手机号格式不正确（需 11 位数字）');
+    if (!cleanGender) throw new ApiError('性别为必填项');
+
     // 校验登记人必须属于眼科部
     assertOphthalmologyOperator(db, operator);
 
@@ -59,19 +68,16 @@ router.post(
     const now = nowISO();
     const recDate = recordDate || todayDate();
 
-    // 手机号校验（若提供）
-    const cleanPhone = customerPhone ? String(customerPhone).trim() : '';
-    if (cleanPhone && !/^1\d{10}$/.test(cleanPhone)) {
-      throw new ApiError('手机号格式不正确');
-    }
-
     const row = {
       id,
       mode,
-      customer_name: String(customerName || '').trim(),
+      customer_name: cleanName,
       customer_phone: cleanPhone,
-      customer_gender: String(customerGender || ''),
+      customer_gender: cleanGender,
       customer_address: String(customerAddress || ''),
+      // 按 IMPLEMENTATION.md 1.2 新增字段：customer_ref_id Phase 1 先自引用，Phase 2 改为候选逻辑
+      customer_ref_id: id,
+      review_cycle_days: Number(req.body?.reviewCycleDays) || 90,
       condition: String(condition || ''),
       answers:
         typeof answers === 'string'
@@ -87,17 +93,19 @@ router.post(
 
     withChangeTx(db, () => {
       // 若手机号非空且客户表里没有，自动建 stub 客户档案（保证先登记病例也能查到该客户）
+      // 按规则3仅空回填 gender
       if (cleanPhone) {
         ensureCustomer(db, {
           phone: cleanPhone,
           name: row.customer_name,
           address: row.customer_address,
           operator: row.operator,
+          gender: cleanGender,
         });
       }
       db.prepare(
-        `INSERT INTO cases (id, mode, customer_name, customer_phone, customer_gender, customer_address, condition, answers, record_date, store, operator, created_at, updated_at, sync_status)
-         VALUES (@id, @mode, @customer_name, @customer_phone, @customer_gender, @customer_address, @condition, @answers, @record_date, @store, @operator, @created_at, @updated_at, @sync_status)`
+        `INSERT INTO cases (id, mode, customer_name, customer_phone, customer_gender, customer_address, customer_ref_id, review_cycle_days, condition, answers, record_date, store, operator, created_at, updated_at, sync_status)
+         VALUES (@id, @mode, @customer_name, @customer_phone, @customer_gender, @customer_address, @customer_ref_id, @review_cycle_days, @condition, @answers, @record_date, @store, @operator, @created_at, @updated_at, @sync_status)`
       ).run(row);
       recordChange(db, { tableName: 'cases', recordId: id, operation: 'upsert', payload: row });
     });

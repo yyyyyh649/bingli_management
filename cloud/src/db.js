@@ -45,6 +45,16 @@ export function initDb(opts = {}) {
     'ALTER TABLE customers ADD COLUMN review_contact_status TEXT DEFAULT "pending"',
     'ALTER TABLE customers ADD COLUMN review_contact_note TEXT DEFAULT ""',
     'ALTER TABLE customers ADD COLUMN review_contact_updated_at TEXT DEFAULT ""',
+    'ALTER TABLE customers ADD COLUMN age INTEGER DEFAULT NULL',
+    'ALTER TABLE customers ADD COLUMN birthday TEXT DEFAULT NULL',
+    'ALTER TABLE customers ADD COLUMN gender TEXT DEFAULT ""',
+    'ALTER TABLE customers ADD COLUMN age_is_estimated INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE cases ADD COLUMN customer_ref_id TEXT DEFAULT ""',
+    'ALTER TABLE cases ADD COLUMN review_cycle_days INTEGER NOT NULL DEFAULT 90',
+    'ALTER TABLE prescriptions ADD COLUMN customer_ref_id TEXT DEFAULT ""',
+    'ALTER TABLE prescriptions ADD COLUMN review_cycle_days INTEGER NOT NULL DEFAULT 90',
+    'ALTER TABLE prescriptions ADD COLUMN gender TEXT DEFAULT ""',
+    'ALTER TABLE prescriptions ADD COLUMN notes TEXT DEFAULT ""',
   ];
   for (const sql of migrations) {
     try { db.exec(sql); } catch { /* 列已存在，忽略 */ }

@@ -1,5 +1,6 @@
 import React from 'react';
-import { Card, Form, Input, Button, Modal, Space, Select } from 'antd';
+import { Card, Form, Input, Button, Modal, Space, Select, DatePicker } from 'antd';
+import dayjs from 'dayjs';
 import { useNavigate } from 'react-router-dom';
 import { createCustomer } from '../../api/customers.js';
 import { useOperators } from '../../api/operators.js';
@@ -14,7 +15,12 @@ export default function CustomerRegister() {
   const onFinish = async (values) => {
     setSubmitting(true);
     try {
-      const customer = await createCustomer(values);
+      // 按 IMPLEMENTATION.md 1.4：birthday 格式化为 YYYY-MM-DD
+      const payload = {
+        ...values,
+        birthday: values.birthday ? dayjs(values.birthday).format('YYYY-MM-DD') : '',
+      };
+      const customer = await createCustomer(payload);
       const phone = values.phone;
       Modal.confirm({
         title: '登记成功',
@@ -57,6 +63,23 @@ export default function CustomerRegister() {
           ]}
         >
           <PhoneInput placeholder="11 位手机号" />
+        </Form.Item>
+        <Form.Item
+          label="生日"
+          name="birthday"
+          rules={[{ required: true, message: '请选择生日' }]}
+        >
+          <DatePicker style={{ width: '100%' }} placeholder="选择出生日期" />
+        </Form.Item>
+        <Form.Item
+          label="性别"
+          name="gender"
+          rules={[{ required: true, message: '请选择性别' }]}
+        >
+          <Select placeholder="请选择性别">
+            <Select.Option value="男">男</Select.Option>
+            <Select.Option value="女">女</Select.Option>
+          </Select>
         </Form.Item>
         <Form.Item label="会员卡号（可选）" name="memberCardNo">
           <Input placeholder="选填" />

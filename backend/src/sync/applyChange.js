@@ -5,11 +5,11 @@ import { SYNC_STATUS } from '@optical/shared/constants.js';
 // 各同步表的可写字段白名单（与 schema 一致，防注入）
 const TABLE_FIELDS = {
   // 按 IMPLEMENTATION.md Phase 0 Bug-2 调整：补全 review_* 字段，避免跨店同步丢失复查信息
-  customers: ['id', 'phone', 'name', 'member_card_no', 'address', 'store', 'operator', 'balance', 'review_cycle_days', 'review_contact_status', 'review_contact_note', 'review_contact_updated_at', 'created_at', 'updated_at', 'sync_status'],
+  customers: ['id', 'phone', 'name', 'member_card_no', 'address', 'store', 'operator', 'balance', 'age', 'birthday', 'gender', 'age_is_estimated', 'review_cycle_days', 'review_contact_status', 'review_contact_note', 'review_contact_updated_at', 'created_at', 'updated_at', 'sync_status'],
   points_ledger: ['id', 'customer_phone', 'amount', 'source_type', 'related_prescription_id', 'note', 'store', 'operator', 'created_at', 'sync_status'],
   balance_ledger: ['id', 'customer_phone', 'amount', 'source_type', 'related_prescription_id', 'note', 'store', 'operator', 'created_at', 'sync_status'],
-  cases: ['id', 'mode', 'customer_name', 'customer_phone', 'customer_gender', 'customer_address', 'condition', 'answers', 'record_date', 'store', 'operator', 'created_at', 'updated_at', 'sync_status'],
-  prescriptions: ['id', 'customer_phone', 'customer_name', 'page1', 'od_ds', 'od_dc', 'os_ds', 'os_dc', 'page6', 'points_target_phone', 'points_amount', 'original_amount', 'discount_type', 'discount_value', 'discounted_amount', 'balance_deduction', 'points_deduction', 'points_deduction_amount', 'paid_amount', 'points_earned', 'record_date', 'store', 'operator', 'created_at', 'updated_at', 'sync_status'],
+  cases: ['id', 'mode', 'customer_name', 'customer_phone', 'customer_gender', 'customer_address', 'customer_ref_id', 'review_cycle_days', 'condition', 'answers', 'record_date', 'store', 'operator', 'created_at', 'updated_at', 'sync_status'],
+  prescriptions: ['id', 'customer_phone', 'customer_name', 'customer_ref_id', 'review_cycle_days', 'gender', 'notes', 'page1', 'od_ds', 'od_dc', 'os_ds', 'os_dc', 'page6', 'points_target_phone', 'points_amount', 'original_amount', 'discount_type', 'discount_value', 'discounted_amount', 'balance_deduction', 'points_deduction', 'points_deduction_amount', 'paid_amount', 'points_earned', 'record_date', 'store', 'operator', 'created_at', 'updated_at', 'sync_status'],
   operators: ['id', 'name', 'store', 'department', 'sort_order', 'created_at', 'updated_at', 'sync_status'],
 };
 

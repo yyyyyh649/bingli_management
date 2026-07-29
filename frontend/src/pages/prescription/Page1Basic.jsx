@@ -1,5 +1,5 @@
 import React from 'react';
-import { Form, Input, InputNumber, DatePicker } from 'antd';
+import { Form, Input, InputNumber, DatePicker, Select } from 'antd';
 import dayjs from 'dayjs';
 import PhoneInput, { phoneValidator } from '../../components/PhoneInput.jsx';
 
@@ -16,8 +16,14 @@ export default function Page1Basic({ form }) {
       <Form.Item label="姓名" name="name" rules={[{ required: true, message: '请输入姓名' }]}>
         <Input placeholder="请输入姓名" />
       </Form.Item>
-      <Form.Item label="年龄" name="age" rules={[{ required: true, message: '请输入年龄' }]}>
-        <InputNumber min={0} max={150} style={{ width: '100%' }} placeholder="岁" />
+      <Form.Item label="性别" name="gender" rules={[{ required: true, message: '请选择性别' }]}>
+        <Select placeholder="请选择性别">
+          <Select.Option value="男">男</Select.Option>
+          <Select.Option value="女">女</Select.Option>
+        </Select>
+      </Form.Item>
+      <Form.Item label="年龄" name="age">
+        <InputNumber min={0} max={150} style={{ width: '100%' }} placeholder="选填" />
       </Form.Item>
       <Form.Item label="住址" name="address">
         <Input.TextArea rows={2} placeholder="选填" />
@@ -27,10 +33,11 @@ export default function Page1Basic({ form }) {
         name="phone"
         hasFeedback
         rules={[
+          { required: true, message: '请输入手机号' },
           { validator: phoneValidator, validateTrigger: 'onChange' },
         ]}
       >
-        <PhoneInput placeholder="11 位手机号（选填，但归属本人积分时必填）" />
+        <PhoneInput placeholder="11 位手机号" />
       </Form.Item>
       <Form.Item
         label="登记日期"

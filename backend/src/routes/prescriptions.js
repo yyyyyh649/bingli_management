@@ -61,7 +61,14 @@ router.post(
     const now = nowISO();
     const recDate = page1.record_date || todayDate();
     const phone = page1.phone ? String(page1.phone).trim() : '';
-    if (phone && !/^1\d{10}$/.test(phone)) throw new ApiError('手机号格式不正确');
+    const customerName = String(page1.name || '').trim();
+    const gender = String(page1.gender || '').trim();
+
+    // 按 IMPLEMENTATION.md 1.3 必填校验：姓名/手机号/性别必填
+    if (!customerName) throw new ApiError('姓名为必填项');
+    if (!phone) throw new ApiError('手机号为必填项');
+    if (!/^1\d{10}$/.test(phone)) throw new ApiError('手机号格式不正确（需 11 位数字）');
+    if (!gender) throw new ApiError('性别为必填项');
 
     // 校验登记人必须属于配镜部
     assertOpticalOperator(db, operator);
@@ -120,7 +127,12 @@ router.post(
     const prescriptionRow = {
       id,
       customer_phone: phone,
-      customer_name: String(page1.name || '').trim(),
+      customer_name: customerName,
+      // 按 IMPLEMENTATION.md 1.2 新增字段：customer_ref_id Phase 1 先自引用，Phase 2 改为候选逻辑
+      customer_ref_id: id,
+      review_cycle_days: Number(page1.review_cycle_days) || 90,
+      gender,
+      notes: String(page1.notes || req.body?.notes || '').trim(),
       page1: JSON.stringify(page1),
       od_ds: JSON.stringify(od_ds),
       od_dc: JSON.stringify(od_dc),
@@ -151,13 +163,16 @@ router.post(
     let balanceDeductRow = null;
 
     withChangeTx(db, () => {
-      // 自动为客户建 stub 档案
+      // 自动为客户建 stub 档案（按规则3仅空回填 age/gender/birthday）
       if (phone) {
         ensureCustomer(db, {
           phone,
-          name: String(page1.name || '').trim(),
+          name: customerName,
           address: String(page1.address || '').trim(),
           operator: String(operator || ''),
+          age: page1.age != null ? page1.age : null,
+          gender,
+          birthday: page1.birthday || '',
         });
       }
       if (targetPhone && targetPhone !== phone) {
@@ -228,10 +243,10 @@ router.post(
 
       // 写验光单
       db.prepare(
-        `INSERT INTO prescriptions (id, customer_phone, customer_name, page1, od_ds, od_dc, os_ds, os_dc, page6, points_target_phone, points_amount,
+        `INSERT INTO prescriptions (id, customer_phone, customer_name, customer_ref_id, review_cycle_days, gender, notes, page1, od_ds, od_dc, os_ds, os_dc, page6, points_target_phone, points_amount,
            original_amount, discount_type, discount_value, discounted_amount, balance_deduction, points_deduction, points_deduction_amount, paid_amount, points_earned,
            record_date, store, operator, created_at, updated_at, sync_status)
-         VALUES (@id, @customer_phone, @customer_name, @page1, @od_ds, @od_dc, @os_ds, @os_dc, @page6, @points_target_phone, @points_amount,
+         VALUES (@id, @customer_phone, @customer_name, @customer_ref_id, @review_cycle_days, @gender, @notes, @page1, @od_ds, @od_dc, @os_ds, @os_dc, @page6, @points_target_phone, @points_amount,
            @original_amount, @discount_type, @discount_value, @discounted_amount, @balance_deduction, @points_deduction, @points_deduction_amount, @paid_amount, @points_earned,
            @record_date, @store, @operator, @created_at, @updated_at, @sync_status)`
       ).run(prescriptionRow);

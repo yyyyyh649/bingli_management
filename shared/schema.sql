@@ -26,6 +26,10 @@ CREATE TABLE IF NOT EXISTS customers (
   store           TEXT NOT NULL,
   operator        TEXT DEFAULT '',
   balance         REAL NOT NULL DEFAULT 0,
+  age                INTEGER DEFAULT NULL,
+  birthday           TEXT DEFAULT NULL,
+  gender             TEXT DEFAULT '',
+  age_is_estimated   INTEGER NOT NULL DEFAULT 0,
   review_cycle_days        INTEGER NOT NULL DEFAULT 90,  -- 复查周期（天），默认3个月
   review_contact_status    TEXT NOT NULL DEFAULT 'pending', -- 待联系/已联系/已到店
   review_contact_note      TEXT NOT NULL DEFAULT '',
@@ -88,6 +92,8 @@ CREATE TABLE IF NOT EXISTS cases (
   customer_phone    TEXT DEFAULT '',
   customer_gender   TEXT DEFAULT '',         -- '男' | '女' | ''
   customer_address  TEXT DEFAULT '',
+  customer_ref_id    TEXT DEFAULT '',
+  review_cycle_days  INTEGER NOT NULL DEFAULT 90,
   condition         TEXT DEFAULT '',         -- 简约模式病情描述
   answers           TEXT DEFAULT '[]',       -- 复杂模式问卷作答 JSON
   record_date       TEXT NOT NULL,           -- 登记日期 YYYY-MM-DD
@@ -99,6 +105,7 @@ CREATE TABLE IF NOT EXISTS cases (
 );
 CREATE INDEX IF NOT EXISTS idx_cases_customer_phone ON cases(customer_phone);
 CREATE INDEX IF NOT EXISTS idx_cases_record_date    ON cases(record_date);
+CREATE INDEX IF NOT EXISTS idx_cases_customer_ref_id ON cases(customer_ref_id);
 
 -- ----------------------------------------------------------------------------
 -- 4.5 验光单表
@@ -108,6 +115,10 @@ CREATE TABLE IF NOT EXISTS prescriptions (
   id                  TEXT PRIMARY KEY,
   customer_phone      TEXT DEFAULT '',       -- 顶层独立字段，与 page1.phone 保持一致
   customer_name       TEXT DEFAULT '',
+  customer_ref_id    TEXT DEFAULT '',
+  review_cycle_days  INTEGER NOT NULL DEFAULT 90,
+  gender             TEXT DEFAULT '',
+  notes              TEXT DEFAULT '',
   page1               TEXT DEFAULT '{}',     -- JSON: {name,age,address,phone,record_date}
   od_ds               TEXT DEFAULT '{}',     -- JSON: 6 项 {key: {value}}
   od_dc               TEXT DEFAULT '{}',     -- JSON: 6 项 {key: {value, axis}}
@@ -135,6 +146,7 @@ CREATE TABLE IF NOT EXISTS prescriptions (
 );
 CREATE INDEX IF NOT EXISTS idx_prescriptions_customer_phone ON prescriptions(customer_phone);
 CREATE INDEX IF NOT EXISTS idx_prescriptions_record_date    ON prescriptions(record_date);
+CREATE INDEX IF NOT EXISTS idx_prescriptions_customer_ref_id ON prescriptions(customer_ref_id);
 
 -- ----------------------------------------------------------------------------
 -- 4.8 登记人名单（每店各自维护）

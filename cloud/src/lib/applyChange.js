@@ -9,6 +9,7 @@ const TABLE_FIELDS = {
   customers: [
     'id', 'phone', 'name', 'member_card_no', 'address',
     'store', 'operator', 'balance',
+    'age', 'birthday', 'gender', 'age_is_estimated',
     'review_cycle_days', 'review_contact_status', 'review_contact_note', 'review_contact_updated_at',
     'created_at', 'updated_at', 'sync_status',
   ],
@@ -24,11 +25,11 @@ const TABLE_FIELDS = {
   ],
   cases: [
     'id', 'mode', 'customer_name', 'customer_phone', 'customer_gender',
-    'customer_address', 'condition', 'answers', 'record_date',
+    'customer_address', 'customer_ref_id', 'review_cycle_days', 'condition', 'answers', 'record_date',
     'store', 'operator', 'created_at', 'updated_at', 'sync_status',
   ],
   prescriptions: [
-    'id', 'customer_phone', 'customer_name', 'page1',
+    'id', 'customer_phone', 'customer_name', 'customer_ref_id', 'review_cycle_days', 'gender', 'notes', 'page1',
     'od_ds', 'od_dc', 'os_ds', 'os_dc', 'page6',
     'points_target_phone', 'points_amount',
     'original_amount', 'discount_type', 'discount_value', 'discounted_amount',

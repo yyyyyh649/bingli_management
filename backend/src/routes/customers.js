@@ -16,6 +16,18 @@ function validatePhone(phone) {
   return /^1\d{10}$/.test(String(phone).trim());
 }
 
+// 按 IMPLEMENTATION.md 1.4：由生日派生年龄（周岁）
+function ageFromBirthday(birthday) {
+  const b = String(birthday || '').trim();
+  const m = b.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  const today = todayDate();
+  let age = Number(today.slice(0, 4)) - Number(m[1]);
+  const monthDay = today.slice(5);
+  if (monthDay < `${m[2]}-${m[3]}`) age -= 1;
+  return age >= 0 ? age : 0;
+}
+
 const VALID_CONTACT_STATUS = new Set(Object.values(REVIEW_CONTACT_STATUS));
 
 // 列出全部客户（按创建时间倒序，最多 500 条）
@@ -184,13 +196,30 @@ router.get('/:phone/profile', (req, res) => {
   );
 });
 
-// 新建/合并客户
+// 新建/合并客户（会员登记）
 router.post(
   '/',
   asyncHandler(async (req, res) => {
-    const { phone, name, memberCardNo, address, operator } = req.body || {};
+    const { phone, name, memberCardNo, address, operator, birthday, gender, age } = req.body || {};
     const cleanPhone = String(phone || '').trim();
     if (!validatePhone(cleanPhone)) throw new ApiError('手机号格式不正确（需 11 位数字）');
+    // 按 IMPLEMENTATION.md 1.4：会员登记时生日、性别必选
+    const cleanBirthday = String(birthday || '').trim();
+    const cleanGender = String(gender || '').trim();
+    if (!cleanBirthday) throw new ApiError('生日为必填项');
+    if (!cleanGender) throw new ApiError('性别为必填项');
+
+    // 年龄派生：有生日→由生日算（age_is_estimated=0）；无生日但有年龄→估算（age_is_estimated=1）
+    let derivedAge = null;
+    let ageIsEstimated = 0;
+    if (cleanBirthday) {
+      derivedAge = ageFromBirthday(cleanBirthday);
+      ageIsEstimated = 0;
+    } else if (age != null && age !== '') {
+      derivedAge = Number(age) || null;
+      ageIsEstimated = 1;
+    }
+
     const db = getDb();
     const store = process.env.STORE_ID || 'store1';
 
@@ -202,13 +231,17 @@ router.post(
         name: name !== undefined ? String(name).trim() : existing.name,
         member_card_no: memberCardNo !== undefined ? (memberCardNo ? String(memberCardNo).trim() : null) : existing.member_card_no,
         address: address !== undefined ? String(address || '') : existing.address,
+        birthday: cleanBirthday || existing.birthday || null,
+        gender: cleanGender || existing.gender || '',
+        age: derivedAge != null ? derivedAge : existing.age,
+        age_is_estimated: ageIsEstimated,
         updated_at: nowISO(),
         sync_status: 'pending',
       };
       withChangeTx(db, () => {
         db.prepare(
-          `UPDATE customers SET name = ?, member_card_no = ?, address = ?, updated_at = ?, sync_status = ? WHERE id = ?`
-        ).run(next.name, next.member_card_no, next.address, next.updated_at, 'pending', existing.id);
+          `UPDATE customers SET name = ?, member_card_no = ?, address = ?, birthday = ?, gender = ?, age = ?, age_is_estimated = ?, updated_at = ?, sync_status = ? WHERE id = ?`
+        ).run(next.name, next.member_card_no, next.address, next.birthday, next.gender, next.age, next.age_is_estimated, next.updated_at, 'pending', existing.id);
         recordChange(db, { tableName: 'customers', recordId: existing.id, operation: 'upsert', payload: next });
       });
       return res.json(ok(next));
@@ -225,14 +258,18 @@ router.post(
       store,
       operator: String(operator || ''),
       balance: 0,
+      birthday: cleanBirthday || null,
+      gender: cleanGender,
+      age: derivedAge,
+      age_is_estimated: ageIsEstimated,
       created_at: now,
       updated_at: now,
       sync_status: 'pending',
     };
     withChangeTx(db, () => {
       db.prepare(
-        `INSERT INTO customers (id, phone, name, member_card_no, address, store, operator, balance, created_at, updated_at, sync_status)
-         VALUES (@id, @phone, @name, @member_card_no, @address, @store, @operator, @balance, @created_at, @updated_at, @sync_status)`
+        `INSERT INTO customers (id, phone, name, member_card_no, address, store, operator, balance, birthday, gender, age, age_is_estimated, created_at, updated_at, sync_status)
+         VALUES (@id, @phone, @name, @member_card_no, @address, @store, @operator, @balance, @birthday, @gender, @age, @age_is_estimated, @created_at, @updated_at, @sync_status)`
       ).run(row);
       recordChange(db, { tableName: 'customers', recordId: id, operation: 'upsert', payload: row });
     });
