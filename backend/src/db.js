@@ -55,6 +55,8 @@ export function initDb(opts = {}) {
     'ALTER TABLE prescriptions ADD COLUMN review_cycle_days INTEGER NOT NULL DEFAULT 90',
     'ALTER TABLE prescriptions ADD COLUMN gender TEXT DEFAULT ""',
     'ALTER TABLE prescriptions ADD COLUMN notes TEXT DEFAULT ""',
+    // 按用户新需求 Phase E：充值记录实充金额（实际收款）；到账金额沿用 amount
+    'ALTER TABLE balance_ledger ADD COLUMN actual_amount REAL DEFAULT NULL',
     // 索引必须在 ALTER TABLE 加列之后创建（旧库表已存在但无 customer_ref_id 列，schema.sql 里无法建）
     'CREATE INDEX IF NOT EXISTS idx_cases_customer_ref_id ON cases(customer_ref_id)',
     'CREATE INDEX IF NOT EXISTS idx_prescriptions_customer_ref_id ON prescriptions(customer_ref_id)',

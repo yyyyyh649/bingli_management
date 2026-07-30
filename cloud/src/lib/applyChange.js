@@ -21,7 +21,7 @@ const TABLE_FIELDS = {
   balance_ledger: [
     'id', 'customer_phone', 'amount', 'source_type',
     'related_prescription_id', 'note', 'store', 'operator',
-    'created_at', 'sync_status',
+    'created_at', 'sync_status', 'actual_amount',
   ],
   cases: [
     'id', 'mode', 'customer_name', 'customer_phone', 'customer_gender',

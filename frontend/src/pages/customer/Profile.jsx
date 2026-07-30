@@ -97,6 +97,7 @@ export default function CustomerProfile() {
         sourceType: balanceType === 'topup' ? BALANCE_SOURCE.TOPUP : BALANCE_SOURCE.MANUAL_DEDUCT,
         note: values.note || '',
         operator: values.operator || '',
+        actualAmount: balanceType === 'topup' ? Math.abs(Number(values.actualAmount)) : null,
       });
       message.success(balanceType === 'topup' ? '充值成功' : '扣减成功');
       setBalanceModalOpen(false);
@@ -351,7 +352,7 @@ export default function CustomerProfile() {
         </div>
         <Form form={balanceForm} layout="vertical">
           <Form.Item
-            label={balanceType === 'topup' ? '充值金额（元）' : '扣减金额（元）'}
+            label={balanceType === 'topup' ? '到账金额（元，充入卡内）' : '扣减金额（元）'}
             name="amount"
             rules={[{ required: true, message: '请输入金额' }]}
           >
@@ -363,6 +364,22 @@ export default function CustomerProfile() {
               placeholder="请输入金额"
             />
           </Form.Item>
+          {balanceType === 'topup' && (
+            <Form.Item
+              label="实充金额（元，实际收款）"
+              name="actualAmount"
+              rules={[{ required: true, message: '请输入实充金额' }]}
+              extra="实充 = 客户实际付的钱；到账 = 充入卡内的钱（可赠费）"
+            >
+              <InputNumber
+                min={0}
+                step={0.01}
+                precision={2}
+                style={{ width: '100%' }}
+                placeholder="实际收款金额"
+              />
+            </Form.Item>
+          )}
           <Form.Item
             label="登记人"
             name="operator"

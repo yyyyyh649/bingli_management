@@ -37,6 +37,18 @@ export default function BalanceLedgerTable({ balance = [], loading = false }) {
       },
     },
     {
+      title: '实充金额',
+      dataIndex: 'actual_amount',
+      key: 'actual_amount',
+      width: 100,
+      align: 'right',
+      render: (v, r) => {
+        // 按用户新需求 Phase E：充值显示实充金额，扣减显示 -
+        if (r.source_type !== 'topup' || v == null) return '-';
+        return <span style={{ color: '#fa8c16' }}>¥{Number(v).toFixed(2)}</span>;
+      },
+    },
+    {
       title: '来源类型',
       dataIndex: 'source_type',
       key: 'source_type',

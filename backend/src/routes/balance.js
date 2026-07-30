@@ -33,6 +33,8 @@ router.post(
       sourceType,
       note = '',
       operator = '',
+      // 按用户新需求 Phase E：实充金额（实际收款），仅充值时有效；不传则等于 amount
+      actualAmount = null,
     } = req.body || {};
 
     if (!customerPhone) throw new ApiError('缺少 customerPhone');
@@ -46,6 +48,13 @@ router.post(
     }
     if (amt < 0 && ![BALANCE_SOURCE.MANUAL_DEDUCT, BALANCE_SOURCE.CONSUME].includes(sourceType)) {
       throw new ApiError('扣减时 sourceType 必须为 manual_deduct 或 consume');
+    }
+
+    // 实充金额：仅充值时记录；扣减时为 null
+    let actualAmt = null;
+    if (sourceType === BALANCE_SOURCE.TOPUP) {
+      const a = Number(actualAmount);
+      actualAmt = Number.isFinite(a) && a >= 0 ? a : amt;
     }
 
     const db = getDb();
@@ -64,6 +73,7 @@ router.post(
       operator: String(operator || ''),
       created_at: now,
       sync_status: 'pending',
+      actual_amount: actualAmt,
     };
 
     withChangeTx(db, () => {
@@ -80,8 +90,8 @@ router.post(
       }
 
       db.prepare(
-        `INSERT INTO balance_ledger (id, customer_phone, amount, source_type, related_prescription_id, note, store, operator, created_at, sync_status)
-         VALUES (@id, @customer_phone, @amount, @source_type, @related_prescription_id, @note, @store, @operator, @created_at, @sync_status)`
+        `INSERT INTO balance_ledger (id, customer_phone, amount, source_type, related_prescription_id, note, store, operator, created_at, sync_status, actual_amount)
+         VALUES (@id, @customer_phone, @amount, @source_type, @related_prescription_id, @note, @store, @operator, @created_at, @sync_status, @actual_amount)`
       ).run(row);
       recordChange(db, { tableName: 'balance_ledger', recordId: id, operation: 'upsert', payload: row });
 

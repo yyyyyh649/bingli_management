@@ -75,7 +75,10 @@ CREATE TABLE IF NOT EXISTS balance_ledger (
   store                    TEXT NOT NULL,
   operator                 TEXT DEFAULT '',
   created_at               TEXT NOT NULL,
-  sync_status              TEXT NOT NULL DEFAULT 'pending'
+  sync_status              TEXT NOT NULL DEFAULT 'pending',
+  -- 按用户新需求：充值记录区分实充金额（实际收款）与到账金额（充入卡内=amount）
+  -- 仅充值(topup)有意义；扣减记录该字段为 NULL
+  actual_amount            REAL DEFAULT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_balance_customer_phone ON balance_ledger(customer_phone);
 CREATE INDEX IF NOT EXISTS idx_balance_created_at     ON balance_ledger(created_at);
