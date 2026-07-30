@@ -46,6 +46,63 @@ router.get('/daily-ledger', (req, res) => {
   res.json(ok({ date, points, balance, pointsTotal, balanceTotal }));
 });
 
+// 按用户新需求 Phase F：充值数据查询
+// 返回总实充金额 + 总到账金额 + 充值记录（可按手机号/日期区间筛选）
+router.get('/recharge-stats', (req, res) => {
+  const db = getDb();
+  const phone = String(req.query.phone || '').trim();
+  const startDate = String(req.query.startDate || '').trim();
+  const endDate = String(req.query.endDate || '').trim();
+
+  // 总实充 + 总到账（全部充值记录）
+  const stats = db
+    .prepare(
+      `SELECT
+         COALESCE(SUM(actual_amount), 0) AS total_actual,
+         COALESCE(SUM(amount), 0) AS total_credited,
+         COUNT(*) AS total_count
+       FROM balance_ledger
+       WHERE source_type = 'topup' AND amount > 0`
+    )
+    .get();
+
+  // 充值记录列表（可筛选）
+  const conditions = ["b.source_type = 'topup'", 'b.amount > 0'];
+  const params = [];
+  if (phone) {
+    conditions.push('b.customer_phone = ?');
+    params.push(phone);
+  }
+  if (startDate) {
+    conditions.push('substr(b.created_at, 1, 10) >= ?');
+    params.push(startDate);
+  }
+  if (endDate) {
+    conditions.push('substr(b.created_at, 1, 10) <= ?');
+    params.push(endDate);
+  }
+  const records = db
+    .prepare(
+      `SELECT b.id, b.customer_phone, b.amount, b.actual_amount, b.note, b.store, b.operator,
+              b.created_at, c.name AS customer_name
+       FROM balance_ledger b
+       LEFT JOIN customers c ON c.phone = b.customer_phone
+       WHERE ${conditions.join(' AND ')}
+       ORDER BY b.created_at DESC
+       LIMIT 1000`
+    )
+    .all(...params);
+
+  res.json(
+    ok({
+      totalActual: Number(stats.total_actual || 0),
+      totalCredited: Number(stats.total_credited || 0),
+      totalCount: Number(stats.total_count || 0),
+      records,
+    })
+  );
+});
+
 // 删除日志列表
 router.get('/delete-logs', (req, res) => {
   const db = getDb();
@@ -316,6 +373,34 @@ router.get(
     }
 
     throw new ApiError('type 参数必须为 db 或 excel');
+  })
+);
+
+// 按用户新需求 Phase I：服务器端变更记录查询（代理转发到云端 cloud_change_log）
+// 防篡改审计：按日期/小时/表/操作/门店 查 cloud_change_log
+router.get(
+  '/audit-query',
+  asyncHandler(async (req, res) => {
+    const cloudUrl = process.env.CLOUD_SERVER_URL;
+    const secret = process.env.SYNC_SECRET;
+    if (!cloudUrl || !secret) throw new ApiError('未配置云端同步，无法查询服务器变更记录');
+
+    const params = new URLSearchParams();
+    for (const k of ['date', 'hour', 'table', 'operation', 'store']) {
+      const v = String(req.query[k] || '').trim();
+      if (v) params.set(k, v);
+    }
+    const url = `${cloudUrl.replace(/\/$/, '')}/api/sync/audit-query?${params.toString()}`;
+    const resp = await fetch(url, {
+      headers: { 'X-Sync-Secret': secret, 'X-Sync-Store': process.env.STORE_ID || 'store1' },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!resp.ok) {
+      const txt = await resp.text().catch(() => '');
+      throw new ApiError(`云端查询失败: HTTP ${resp.status} ${txt.slice(0, 200)}`);
+    }
+    const json = await resp.json();
+    res.json(ok(json.data || []));
   })
 );
 

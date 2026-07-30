@@ -12,6 +12,7 @@ import healthRouter from './routes/health.js';
 import pushRouter from './routes/push.js';
 import pullRouter from './routes/pull.js';
 import pointsBroadcastRouter from './routes/pointsBroadcast.js';
+import auditRouter from './routes/audit.js';
 
 const app = express();
 const PORT = parseInt(process.env.CLOUD_PORT || '8080', 10);
@@ -30,6 +31,7 @@ app.use('/api/sync', syncAuth);
 app.use('/api/sync/push', pushRouter);
 app.use('/api/sync/pull', pullRouter);
 app.use('/api/sync/points-broadcast', pointsBroadcastRouter);
+app.use('/api/sync/audit-query', auditRouter);
 
 // 404
 app.use((req, res) => {

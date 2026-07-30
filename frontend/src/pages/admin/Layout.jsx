@@ -45,6 +45,18 @@ const menuItems = [
     icon: <WalletOutlined />,
     label: <Link to="/admin/daily-ledger">每日明细</Link>,
   },
+  // 按用户新需求 Phase F：充值数据查询
+  {
+    key: '/admin/recharge',
+    icon: <WalletOutlined />,
+    label: <Link to="/admin/recharge">充值查询</Link>,
+  },
+  // 按用户新需求 Phase I：服务器变更记录查询
+  {
+    key: '/admin/audit',
+    icon: <BarChartOutlined />,
+    label: <Link to="/admin/audit">变更记录</Link>,
+  },
 ];
 
 export default function AdminLayout() {
