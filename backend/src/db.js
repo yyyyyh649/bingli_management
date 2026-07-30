@@ -55,6 +55,9 @@ export function initDb(opts = {}) {
     'ALTER TABLE prescriptions ADD COLUMN review_cycle_days INTEGER NOT NULL DEFAULT 90',
     'ALTER TABLE prescriptions ADD COLUMN gender TEXT DEFAULT ""',
     'ALTER TABLE prescriptions ADD COLUMN notes TEXT DEFAULT ""',
+    // 索引必须在 ALTER TABLE 加列之后创建（旧库表已存在但无 customer_ref_id 列，schema.sql 里无法建）
+    'CREATE INDEX IF NOT EXISTS idx_cases_customer_ref_id ON cases(customer_ref_id)',
+    'CREATE INDEX IF NOT EXISTS idx_prescriptions_customer_ref_id ON prescriptions(customer_ref_id)',
   ];
   for (const sql of migrations) {
     try { db.exec(sql); } catch { /* 列已存在，忽略 */ }

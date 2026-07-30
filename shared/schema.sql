@@ -105,7 +105,8 @@ CREATE TABLE IF NOT EXISTS cases (
 );
 CREATE INDEX IF NOT EXISTS idx_cases_customer_phone ON cases(customer_phone);
 CREATE INDEX IF NOT EXISTS idx_cases_record_date    ON cases(record_date);
-CREATE INDEX IF NOT EXISTS idx_cases_customer_ref_id ON cases(customer_ref_id);
+-- idx_cases_customer_ref_id 不在此处创建：旧库升级时 cases 表已存在但无 customer_ref_id 列，
+-- 会导致 db.exec(schema) 中断。改为在 db.js 迁移末尾（ALTER TABLE 加列之后）创建。
 
 -- ----------------------------------------------------------------------------
 -- 4.5 验光单表
@@ -146,7 +147,8 @@ CREATE TABLE IF NOT EXISTS prescriptions (
 );
 CREATE INDEX IF NOT EXISTS idx_prescriptions_customer_phone ON prescriptions(customer_phone);
 CREATE INDEX IF NOT EXISTS idx_prescriptions_record_date    ON prescriptions(record_date);
-CREATE INDEX IF NOT EXISTS idx_prescriptions_customer_ref_id ON prescriptions(customer_ref_id);
+-- idx_prescriptions_customer_ref_id 不在此处创建：旧库升级时 prescriptions 表已存在但无 customer_ref_id 列，
+-- 会导致 db.exec(schema) 中断。改为在 db.js 迁移末尾（ALTER TABLE 加列之后）创建。
 
 -- ----------------------------------------------------------------------------
 -- 4.8 登记人名单（每店各自维护）
