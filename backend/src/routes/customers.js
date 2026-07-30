@@ -30,11 +30,16 @@ function ageFromBirthday(birthday) {
 
 const VALID_CONTACT_STATUS = new Set(Object.values(REVIEW_CONTACT_STATUS));
 
-// 列出全部客户（按创建时间倒序，最多 500 条）
+// 按 Phase A：真会员判定 = member_card_no 有值；
+// 占位客户（member_card_no IS NULL，仅登记病例/验光单未办卡）不视为会员，
+// 不应出现在"会员查询"、候选列表的 member 来源、登记页会员信息区。
+const MEMBER_WHERE = "member_card_no IS NOT NULL AND member_card_no != ''";
+
+// 列出全部会员（按创建时间倒序，最多 500 条）—— 仅真会员，过滤占位客户
 router.get('/', (req, res) => {
   const db = getDb();
   const rows = db
-    .prepare('SELECT * FROM customers ORDER BY created_at DESC LIMIT 500')
+    .prepare(`SELECT * FROM customers WHERE ${MEMBER_WHERE} ORDER BY created_at DESC LIMIT 500`)
     .all();
   res.json(ok(rows));
 });
@@ -50,7 +55,7 @@ router.get('/search', (req, res) => {
     rows = db
       .prepare(
         `SELECT * FROM customers
-         WHERE phone = ? OR phone LIKE ? OR member_card_no LIKE ?
+         WHERE ${MEMBER_WHERE} AND (phone = ? OR phone LIKE ? OR member_card_no LIKE ?)
          ORDER BY (phone = ?) DESC, name ASC LIMIT 100`
       )
       .all(q, `%${q}`, `%${q}`, q);
@@ -58,7 +63,7 @@ router.get('/search', (req, res) => {
     // 按 IMPLEMENTATION.md Phase 4：非数字关键词支持按姓名 + 会员卡号搜索
     rows = db
       .prepare(
-        `SELECT * FROM customers WHERE name LIKE ? OR member_card_no LIKE ? ORDER BY name ASC LIMIT 100`
+        `SELECT * FROM customers WHERE ${MEMBER_WHERE} AND (name LIKE ? OR member_card_no LIKE ?) ORDER BY name ASC LIMIT 100`
       )
       .all(`%${q}%`, `%${q}%`);
   }
@@ -76,15 +81,15 @@ router.get('/candidates', (req, res) => {
   const candidates = [];
   const seenRefIds = new Set();
 
-  // 1. 会员系统匹配
+  // 1. 会员系统匹配（仅真会员，过滤占位客户）
   let members = [];
   if (qPhone && /^\d+$/.test(qPhone)) {
     members = db
-      .prepare('SELECT id, name, phone, gender, age, birthday FROM customers WHERE phone = ? OR phone LIKE ? LIMIT 20')
+      .prepare(`SELECT id, name, phone, gender, age, birthday FROM customers WHERE ${MEMBER_WHERE} AND (phone = ? OR phone LIKE ?) LIMIT 20`)
       .all(qPhone, `%${qPhone}`);
   } else if (qName) {
     members = db
-      .prepare('SELECT id, name, phone, gender, age, birthday FROM customers WHERE name LIKE ? LIMIT 20')
+      .prepare(`SELECT id, name, phone, gender, age, birthday FROM customers WHERE ${MEMBER_WHERE} AND name LIKE ? LIMIT 20`)
       .all(`%${qName}%`);
   }
   for (const m of members) {
@@ -195,20 +200,21 @@ router.get('/records', (req, res) => {
     });
   }
 
-  // 批量查会员标记（按手机号）
+  // 批量查会员标记（按手机号，仅真会员）
   const groups = Array.from(groupMap.values());
   const phones = [...new Set(groups.map((g) => g.phone).filter(Boolean))];
   const memberMap = new Map();
   if (phones.length) {
     const placeholders = phones.map(() => '?').join(',');
     const members = db
-      .prepare(`SELECT phone, member_card_no FROM customers WHERE phone IN (${placeholders})`)
+      .prepare(`SELECT phone, member_card_no FROM customers WHERE ${MEMBER_WHERE} AND phone IN (${placeholders})`)
       .all(...phones);
     for (const m of members) memberMap.set(m.phone, m);
   }
   for (const g of groups) {
     const m = memberMap.get(g.phone);
-    g.is_member = !!m;
+    // 按 Phase A：is_member 必须基于 member_card_no 有值，占位客户不算会员
+    g.is_member = !!(m && m.member_card_no);
     g.member_card_no = m?.member_card_no || '';
     g.record_count = g.records.length;
   }
@@ -226,20 +232,20 @@ router.get('/registration-context', (req, res) => {
   const qPhone = String(phone || '').trim();
   const db = getDb();
 
-  // 1. 会员信息：优先按完整手机号精确查，否则按姓名查
+  // 1. 会员信息：优先按完整手机号精确查，否则按姓名查（仅真会员，过滤占位客户）
   let member = null;
   if (qPhone && /^1\d{10}$/.test(qPhone)) {
     member = db
       .prepare(
         `SELECT c.*, COALESCE((SELECT SUM(amount) FROM points_ledger WHERE customer_phone = c.phone), 0) AS points
-         FROM customers c WHERE c.phone = ?`
+         FROM customers c WHERE c.${MEMBER_WHERE} AND c.phone = ?`
       )
       .get(qPhone);
   } else if (qName) {
     member = db
       .prepare(
         `SELECT c.*, COALESCE((SELECT SUM(amount) FROM points_ledger WHERE customer_phone = c.phone), 0) AS points
-         FROM customers c WHERE c.name LIKE ? ORDER BY c.updated_at DESC LIMIT 1`
+         FROM customers c WHERE c.${MEMBER_WHERE} AND c.name LIKE ? ORDER BY c.updated_at DESC LIMIT 1`
       )
       .get(`%${qName}%`);
   }
@@ -283,7 +289,8 @@ router.get('/birthdays-today', (req, res) => {
     .prepare(
       `SELECT id, name, phone, member_card_no, birthday, operator, store, created_at
        FROM customers
-       WHERE birthday IS NOT NULL
+       WHERE ${MEMBER_WHERE}
+         AND birthday IS NOT NULL
          AND birthday != ''
          AND substr(birthday, 6) = ?
        ORDER BY name ASC`
