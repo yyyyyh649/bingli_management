@@ -7,6 +7,7 @@ import { recordChange, withChangeTx } from '../lib/outbox.js';
 import { nowISO, BALANCE_SOURCE } from '@optical/shared/constants.js';
 import { checkDeletePassword } from '../lib/password.js';
 import { ensureCustomer } from '../lib/customer.js';
+import { saveToRecycleBin } from '../lib/recycleBin.js';
 
 const router = Router();
 
@@ -123,6 +124,7 @@ router.delete(
     if (!existing) throw new ApiError('余额记录不存在', 404);
 
     withChangeTx(db, () => {
+      saveToRecycleBin(db, 'balance_ledger', existing);
       // 反向调整 customers.balance
       db.prepare('UPDATE customers SET balance = balance - ?, updated_at = ?, sync_status = ? WHERE phone = ?')
         .run(existing.amount, nowISO(), 'pending', existing.customer_phone);

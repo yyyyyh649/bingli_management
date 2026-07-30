@@ -18,10 +18,11 @@ export const CASE_MODE = {
 // 积分来源类型
 export const POINTS_SOURCE = {
   PRESCRIPTION: 'prescription',   // 验光配镜自动积分
+  CASE: 'case',                   // 病例登记自动积分
   MANUAL_ADD: 'manual_add',       // 后台手动加分
   WITHDRAW: 'withdraw',           // 提现
   GIFT_REDEEM: 'gift_redeem',     // 兑换小礼品
-  CONSUME_DEDUCT: 'consume_deduct', // 验光单积分抵扣（扣减）
+  CONSUME_DEDUCT: 'consume_deduct', // 消费积分抵扣（扣减，验光单/病例通用）
 };
 
 // 余额来源类型
@@ -67,7 +68,23 @@ export const SYNC_TABLES = [
   'cases',
   'prescriptions',
   'operators',
+  'point_tier_config',
+  'form_templates',
 ];
+
+// 按用户新需求 Phase H：模板类型与上限
+export const TEMPLATE_TYPES = {
+  PRESCRIPTION: 'prescription',
+  CASE: 'case',
+};
+
+export const TEMPLATE_TYPE_LABELS = {
+  prescription: '验光单',
+  case: '病例',
+};
+
+export const TEMPLATE_MAX_PER_TYPE = 10;
+export const TEMPLATE_PAGE_MAX_COLS = 4;
 
 // 验光单 6 个项目键（DS 与 DC 共用同一组顺序）
 export const PRESCRIPTION_STEPS = [

@@ -28,6 +28,9 @@ import AdminPerformance from './pages/admin/Performance.jsx';
 import AdminDailyLedger from './pages/admin/DailyLedger.jsx';
 import AdminRechargeQuery from './pages/admin/RechargeQuery.jsx';
 import AdminAuditQuery from './pages/admin/AuditQuery.jsx';
+import AdminRecycleBin from './pages/admin/RecycleBin.jsx';
+import AdminPointTiers from './pages/admin/PointTiers.jsx';
+import AdminTemplates from './pages/admin/Templates.jsx';
 import GlobalReminders from './components/GlobalReminders.jsx';
 import NotFound from './pages/NotFound.jsx';
 
@@ -145,6 +148,9 @@ export default function App() {
             <Route path="daily-ledger" element={<AdminDailyLedger />} />
             <Route path="recharge" element={<AdminRechargeQuery />} />
             <Route path="audit" element={<AdminAuditQuery />} />
+            <Route path="recycle-bin" element={<AdminRecycleBin />} />
+            <Route path="point-tiers" element={<AdminPointTiers />} />
+            <Route path="templates" element={<AdminTemplates />} />
             <Route path="export" element={<AdminExport />} />
           </Route>
           <Route path="*" element={<NotFound />} />

@@ -27,6 +27,11 @@ const TABLE_FIELDS = {
     'id', 'mode', 'customer_name', 'customer_phone', 'customer_gender',
     'customer_address', 'customer_ref_id', 'review_cycle_days', 'condition', 'answers', 'record_date',
     'store', 'operator', 'created_at', 'updated_at', 'sync_status',
+    'original_amount', 'discount_type', 'discount_value', 'discounted_amount',
+    'balance_deduction', 'balance_deduction_phone',
+    'points_deduction', 'points_deduction_amount', 'points_deduction_phone',
+    'paid_amount', 'points_earned', 'points_target_phone',
+    'template_id', 'template_answers',
   ],
   prescriptions: [
     'id', 'customer_phone', 'customer_name', 'customer_ref_id', 'review_cycle_days', 'gender', 'notes', 'page1',
@@ -36,9 +41,18 @@ const TABLE_FIELDS = {
     'balance_deduction', 'points_deduction', 'points_deduction_amount',
     'paid_amount', 'points_earned',
     'record_date', 'store', 'operator', 'created_at', 'updated_at', 'sync_status',
+    'template_id', 'template_answers',
   ],
   operators: [
     'id', 'name', 'store', 'department', 'sort_order',
+    'created_at', 'updated_at', 'sync_status',
+  ],
+  point_tier_config: [
+    'id', 'tiers', 'reset_month', 'reset_day',
+    'updated_at', 'sync_status',
+  ],
+  form_templates: [
+    'id', 'type', 'name', 'pages', 'store', 'operator',
     'created_at', 'updated_at', 'sync_status',
   ],
 };

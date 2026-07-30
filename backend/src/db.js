@@ -57,6 +57,24 @@ export function initDb(opts = {}) {
     'ALTER TABLE prescriptions ADD COLUMN notes TEXT DEFAULT ""',
     // 按用户新需求 Phase E：充值记录实充金额（实际收款）；到账金额沿用 amount
     'ALTER TABLE balance_ledger ADD COLUMN actual_amount REAL DEFAULT NULL',
+    // 按用户新需求 Phase D：病例登记移植支付页，cases 加支付字段（与 prescriptions 对称）
+    'ALTER TABLE cases ADD COLUMN original_amount REAL DEFAULT 0',
+    'ALTER TABLE cases ADD COLUMN discount_type TEXT DEFAULT ""',
+    'ALTER TABLE cases ADD COLUMN discount_value REAL DEFAULT 0',
+    'ALTER TABLE cases ADD COLUMN discounted_amount REAL DEFAULT 0',
+    'ALTER TABLE cases ADD COLUMN balance_deduction REAL DEFAULT 0',
+    'ALTER TABLE cases ADD COLUMN balance_deduction_phone TEXT DEFAULT ""',
+    'ALTER TABLE cases ADD COLUMN points_deduction INTEGER DEFAULT 0',
+    'ALTER TABLE cases ADD COLUMN points_deduction_amount REAL DEFAULT 0',
+    'ALTER TABLE cases ADD COLUMN points_deduction_phone TEXT DEFAULT ""',
+    'ALTER TABLE cases ADD COLUMN paid_amount REAL DEFAULT 0',
+    'ALTER TABLE cases ADD COLUMN points_earned INTEGER DEFAULT 0',
+    'ALTER TABLE cases ADD COLUMN points_target_phone TEXT DEFAULT ""',
+    // 按用户新需求 Phase H：模板作答存储（template_id 用了哪个模板，template_answers JSON）
+    'ALTER TABLE cases ADD COLUMN template_id TEXT DEFAULT ""',
+    'ALTER TABLE cases ADD COLUMN template_answers TEXT DEFAULT "[]"',
+    'ALTER TABLE prescriptions ADD COLUMN template_id TEXT DEFAULT ""',
+    'ALTER TABLE prescriptions ADD COLUMN template_answers TEXT DEFAULT "[]"',
     // 索引必须在 ALTER TABLE 加列之后创建（旧库表已存在但无 customer_ref_id 列，schema.sql 里无法建）
     'CREATE INDEX IF NOT EXISTS idx_cases_customer_ref_id ON cases(customer_ref_id)',
     'CREATE INDEX IF NOT EXISTS idx_prescriptions_customer_ref_id ON prescriptions(customer_ref_id)',

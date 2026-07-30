@@ -136,6 +136,9 @@ export default function MemberSearch() {
         return (
           <Space>
             <span>{v || '-'}</span>
+            {r.tier_name && r.tier_index >= 0 && (
+              <Tag color="gold" style={{ margin: 0 }}>{r.tier_name}</Tag>
+            )}
             {reminder && (
               <Tooltip title={`需复查：逾期 ${reminder.overdue_days} 天`}>
                 <Tag color="red" style={{ margin: 0 }}>需复查</Tag>

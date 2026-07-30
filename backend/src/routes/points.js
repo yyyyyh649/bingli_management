@@ -9,6 +9,7 @@ import { checkDeletePassword } from '../lib/password.js';
 import { findDuplicatePoints } from '../lib/duplicate.js';
 import { ensureCustomer } from '../lib/customer.js';
 import { triggerPointsImmediatePush } from '../sync/index.js';
+import { saveToRecycleBin } from '../lib/recycleBin.js';
 
 const router = Router();
 
@@ -45,13 +46,13 @@ router.post(
     if (!Number.isInteger(amt) || amt === 0) throw new ApiError('amount 必须是非零整数');
     if (!VALID_SOURCES.has(sourceType)) throw new ApiError('sourceType 非法');
 
-    // 扣分必须为 withdraw / gift_redeem
-    if (amt < 0 && ![POINTS_SOURCE.WITHDRAW, POINTS_SOURCE.GIFT_REDEEM].includes(sourceType)) {
-      throw new ApiError('扣分时 sourceType 必须为 withdraw 或 gift_redeem');
+    // 扣分必须为 withdraw / gift_redeem / consume_deduct
+    if (amt < 0 && ![POINTS_SOURCE.WITHDRAW, POINTS_SOURCE.GIFT_REDEEM, POINTS_SOURCE.CONSUME_DEDUCT].includes(sourceType)) {
+      throw new ApiError('扣分时 sourceType 必须为 withdraw / gift_redeem / consume_deduct');
     }
-    // 加分必须为 prescription / manual_add
-    if (amt > 0 && ![POINTS_SOURCE.PRESCRIPTION, POINTS_SOURCE.MANUAL_ADD].includes(sourceType)) {
-      throw new ApiError('加分时 sourceType 必须为 prescription 或 manual_add');
+    // 加分必须为 prescription / case / manual_add
+    if (amt > 0 && ![POINTS_SOURCE.PRESCRIPTION, POINTS_SOURCE.CASE, POINTS_SOURCE.MANUAL_ADD].includes(sourceType)) {
+      throw new ApiError('加分时 sourceType 必须为 prescription / case / manual_add');
     }
 
     const db = getDb();
@@ -118,6 +119,7 @@ router.delete(
     if (!existing) throw new ApiError('积分记录不存在', 404);
 
     withChangeTx(db, () => {
+      saveToRecycleBin(db, 'points_ledger', existing);
       db.prepare('DELETE FROM points_ledger WHERE id = ?').run(id);
       recordChange(db, { tableName: 'points_ledger', recordId: id, operation: 'delete', payload: null });
       db.prepare(

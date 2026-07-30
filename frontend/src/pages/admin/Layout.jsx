@@ -8,6 +8,9 @@ import {
   DownloadOutlined,
   BarChartOutlined,
   WalletOutlined,
+  UndoOutlined,
+  CrownOutlined,
+  FormOutlined,
 } from '@ant-design/icons';
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
 
@@ -56,6 +59,24 @@ const menuItems = [
     key: '/admin/audit',
     icon: <BarChartOutlined />,
     label: <Link to="/admin/audit">变更记录</Link>,
+  },
+  // 按用户新需求 Phase C：回收站
+  {
+    key: '/admin/recycle-bin',
+    icon: <UndoOutlined />,
+    label: <Link to="/admin/recycle-bin">回收站</Link>,
+  },
+  // 按用户新需求 Phase G：会员积分档位管理
+  {
+    key: '/admin/point-tiers',
+    icon: <CrownOutlined />,
+    label: <Link to="/admin/point-tiers">积分档位</Link>,
+  },
+  // 按用户新需求 Phase H：验光单/病例模板编辑
+  {
+    key: '/admin/templates',
+    icon: <FormOutlined />,
+    label: <Link to="/admin/templates">模板编辑</Link>,
   },
 ];
 

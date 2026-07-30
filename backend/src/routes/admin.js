@@ -5,8 +5,18 @@ import { getDb } from '../db.js';
 import { createReadStream, statSync, unlinkSync } from 'node:fs';
 import { resolve } from 'node:path';
 import * as XLSX from 'xlsx';
-import { PRESCRIPTION_STEPS, PRESCRIPTION_STEP_LABELS, todayDate } from '@optical/shared/constants.js';
+import {
+  PRESCRIPTION_STEPS,
+  PRESCRIPTION_STEP_LABELS,
+  todayDate,
+  nowISO,
+  TEMPLATE_TYPES,
+  TEMPLATE_TYPE_LABELS,
+  TEMPLATE_MAX_PER_TYPE,
+  TEMPLATE_PAGE_MAX_COLS,
+} from '@optical/shared/constants.js';
 import { EYE_EXAM_ITEMS } from '@optical/shared/questionnaire.js';
+import { v4 as uuidv4 } from 'uuid';
 
 const router = Router();
 
@@ -401,6 +411,338 @@ router.get(
     }
     const json = await resp.json();
     res.json(ok(json.data || []));
+  })
+);
+
+// ============================================================================
+// 按用户新需求 Phase C：回收站（软删除保留30天，可恢复，禁删回收站内容）
+// ============================================================================
+import { recordChange, withChangeTx } from '../lib/outbox.js';
+import { cleanExpiredRecycleBin, restoreFromRecycleBin, RECYCLE_RETENTION_DAYS } from '../lib/recycleBin.js';
+import { checkDeletePassword } from '../lib/password.js';
+
+// 表名 -> 中文名映射
+const TABLE_LABELS_CN = {
+  customers: '客户/会员',
+  cases: '病例',
+  prescriptions: '验光单',
+  points_ledger: '积分明细',
+  balance_ledger: '余额明细',
+  operators: '登记人',
+  form_templates: '模板',
+};
+
+// 列表（自动清理已过期项）
+router.get('/recycle-bin', (req, res) => {
+  const db = getDb();
+  // 先清理过期项
+  cleanExpiredRecycleBin(db);
+  const table = String(req.query.table || '').trim();
+  const conditions = [];
+  const params = [];
+  if (table) {
+    conditions.push('table_name = ?');
+    params.push(table);
+  }
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+  const rows = db
+    .prepare(
+      `SELECT id, table_name, record_id, store, operator, deleted_at, expires_at,
+              substr(payload, 1, 500) AS payload_preview
+       FROM recycle_bin ${where}
+       ORDER BY deleted_at DESC
+       LIMIT 1000`
+    )
+    .all(...params);
+  const items = rows.map((r) => {
+    let preview = {};
+    try { preview = JSON.parse(r.payload_preview || '{}'); } catch { /* ignore */ }
+    return {
+      ...r,
+      table_label: TABLE_LABELS_CN[r.table_name] || r.table_name,
+      name: preview.name || preview.customer_name || preview.customer_phone || '(无名称)',
+      retention_days: RECYCLE_RETENTION_DAYS,
+    };
+  });
+  res.json(ok(items));
+});
+
+// 恢复（需密码）
+router.post(
+  '/recycle-bin/:id/restore',
+  asyncHandler(async (req, res) => {
+    const { password } = req.body || {};
+    if (!checkDeletePassword(password)) throw new ApiError('密码错误', 403);
+
+    const db = getDb();
+    const result = withChangeTx(db, () => {
+      const r = restoreFromRecycleBin(db, req.params.id);
+      // 恢复后记录变更，让同步机制重新推送这条 upsert 到其他门店
+      recordChange(db, { tableName: r.tableName, recordId: r.recordId, operation: 'upsert', payload: r.record });
+      return r;
+    });
+    res.json(ok({ restored: true, tableName: result.tableName, recordId: result.recordId }));
+  })
+);
+
+// ============================================================================
+// 按用户新需求 Phase G：会员积分档位管理
+// ============================================================================
+import {
+  getTierConfig,
+  getCumulativePoints,
+  getTierForPoints,
+  getMemberTierInfo,
+  saveTierConfig,
+  getLastResetDate,
+} from '../lib/pointTier.js';
+import { MEMBER_WHERE } from '../lib/memberFilter.js';
+
+// 读取档位配置
+router.get('/point-tiers', (req, res) => {
+  const db = getDb();
+  const config = getTierConfig(db);
+  res.json(ok(config));
+});
+
+// 保存档位配置（1-10档，自定义名称+阈值，可选年度清零日）
+router.post(
+  '/point-tiers',
+  asyncHandler(async (req, res) => {
+    const { tiers = [], resetMonth = null, resetDay = null } = req.body || {};
+    if (!Array.isArray(tiers)) throw new ApiError('tiers 必须是数组');
+    if (tiers.length < 1 || tiers.length > 10) throw new ApiError('档位数量必须为 1-10 个');
+
+    // 校验并排序：每个档位有 name（可选）和 threshold（>=0），按 threshold 升序
+    const cleanTiers = tiers
+      .map((t, i) => ({
+        name: String(t.name || '').trim(),
+        threshold: Math.max(0, Math.floor(Number(t.threshold || 0))),
+      }))
+      .sort((a, b) => a.threshold - b.threshold);
+
+    // 第一个档位阈值必须为 0
+    if (cleanTiers[0].threshold !== 0) {
+      cleanTiers[0].threshold = 0;
+    }
+
+    let rm = resetMonth != null && resetMonth !== '' ? Number(resetMonth) : null;
+    let rd = resetDay != null && resetDay !== '' ? Number(resetDay) : null;
+    if (rm != null && (rm < 1 || rm > 12)) throw new ApiError('清零月份必须在 1-12 之间');
+    if (rd != null && (rd < 1 || rd > 31)) throw new ApiError('清零日期必须在 1-31 之间');
+    // 月份和日期必须同时有或同时无
+    if ((rm != null) !== (rd != null)) throw new ApiError('清零月份和日期必须同时设置或同时不设置');
+
+    const db = getDb();
+    const row = withChangeTx(db, () => {
+      const r = saveTierConfig(db, { tiers: cleanTiers, reset_month: rm, reset_day: rd });
+      recordChange(db, { tableName: 'point_tier_config', recordId: 'default', operation: 'upsert', payload: r });
+      return r;
+    });
+    res.json(ok({ tiers: cleanTiers, reset_month: rm, reset_day: rd }));
+  })
+);
+
+// 查询某个会员的累计积分和档位
+router.get('/point-tiers/member/:phone', (req, res) => {
+  const db = getDb();
+  const info = getMemberTierInfo(db, req.params.phone);
+  const config = getTierConfig(db);
+  res.json(ok({ ...info, resetDate: getLastResetDate(config) }));
+});
+
+// 查询全部会员的累计积分+档位（按累计积分降序），可按档位筛选
+router.get('/point-tiers/members', (req, res) => {
+  const db = getDb();
+  const tierIndex = req.query.tier;
+  const config = getTierConfig(db);
+
+  // 查全部真会员
+  const members = db
+    .prepare(
+      `SELECT id, phone, name, member_card_no FROM customers WHERE ${MEMBER_WHERE} ORDER BY created_at DESC`
+    )
+    .all();
+
+  // 计算每个会员的累计积分和档位
+  const results = members.map((m) => {
+    const cumulative = getCumulativePoints(db, m.phone, config);
+    const tier = getTierForPoints(cumulative, config);
+    return { ...m, cumulative, tierIndex: tier.index, tierName: tier.name };
+  });
+
+  // 按累计积分降序
+  results.sort((a, b) => b.cumulative - a.cumulative);
+
+  // 按档位筛选
+  let filtered = results;
+  if (tierIndex != null && tierIndex !== '') {
+    const idx = Number(tierIndex);
+    filtered = results.filter((r) => r.tierIndex === idx);
+  }
+
+  res.json(ok({ config, members: filtered }));
+});
+
+// ============================================================================
+// 按用户新需求 Phase H：验光单/病例模板 CRUD
+// 个人信息页固定；模板只描述验光/检查/手术内容
+// pages 结构: [{ items: [{ id, type:'choice'|'text', label, width(1-N), required, options:[string] }] }]
+// "其他" 选项在渲染时自动追加、不入库
+// ============================================================================
+const VALID_TEMPLATE_TYPES = new Set(Object.values(TEMPLATE_TYPES));
+
+// 校验并规整 pages 结构
+function normalizePages(pages) {
+  if (!Array.isArray(pages)) throw new ApiError('pages 必须是数组');
+  const result = pages.map((page, pi) => {
+    if (!page || typeof page !== 'object') throw new ApiError(`第 ${pi + 1} 页格式错误`);
+    const items = Array.isArray(page.items) ? page.items : [];
+    const normItems = items.map((it, ii) => {
+      if (!it || typeof it !== 'object') throw new ApiError(`第 ${pi + 1} 页第 ${ii + 1} 题格式错误`);
+      const type = String(it.type || '');
+      if (type !== 'choice' && type !== 'text') throw new ApiError('题目类型必须是 choice 或 text');
+      const label = String(it.label || '').trim();
+      if (!label) throw new ApiError(`第 ${pi + 1} 页第 ${ii + 1} 题缺少问题文本`);
+      let width = Math.floor(Number(it.width || 1));
+      if (!Number.isFinite(width) || width < 1) width = 1;
+      if (width > TEMPLATE_PAGE_MAX_COLS) width = TEMPLATE_PAGE_MAX_COLS;
+      const required = !!it.required;
+      let options = [];
+      if (type === 'choice') {
+        options = Array.isArray(it.options)
+          ? it.options.map((o) => String(o || '').trim()).filter(Boolean)
+          : [];
+      }
+      return {
+        id: String(it.id || uuidv4()),
+        type,
+        label,
+        width,
+        required,
+        options,
+      };
+    });
+    return { items: normItems };
+  });
+  return result;
+}
+
+// 列表（按 type 过滤）
+router.get('/templates', (req, res) => {
+  const db = getDb();
+  const type = String(req.query.type || '').trim();
+  const conditions = [];
+  const params = [];
+  if (type) {
+    if (!VALID_TEMPLATE_TYPES.has(type)) throw new ApiError('type 必须是 prescription 或 case');
+    conditions.push('type = ?');
+    params.push(type);
+  }
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+  const rows = db
+    .prepare(`SELECT id, type, name, store, operator, created_at, updated_at FROM form_templates ${where} ORDER BY updated_at DESC`)
+    .all(...params);
+  res.json(ok(rows));
+});
+
+// 详情
+router.get('/templates/:id', (req, res) => {
+  const db = getDb();
+  const row = db.prepare('SELECT * FROM form_templates WHERE id = ?').get(req.params.id);
+  if (!row) throw new ApiError('模板不存在', 404);
+  let pages = [];
+  try { pages = JSON.parse(row.pages || '[]'); } catch { pages = []; }
+  res.json(ok({ ...row, pages }));
+});
+
+// 新建 / 更新（id 为空则新建；每类型上限 TEMPLATE_MAX_PER_TYPE）
+router.post(
+  '/templates',
+  asyncHandler(async (req, res) => {
+    const { id = '', type, name, pages = [] } = req.body || {};
+    if (!VALID_TEMPLATE_TYPES.has(type)) throw new ApiError('type 必须是 prescription 或 case');
+    const cleanName = String(name || '').trim();
+    if (!cleanName) throw new ApiError('模板名称不能为空');
+    if (cleanName.length > 50) throw new ApiError('模板名称过长（最多 50 字）');
+    const cleanPages = normalizePages(pages);
+
+    const db = getDb();
+    const now = nowISO();
+    const store = process.env.STORE_ID || 'store1';
+    const operator = String(req.body?.operator || '');
+
+    const result = withChangeTx(db, () => {
+      if (id) {
+        const existing = db.prepare('SELECT * FROM form_templates WHERE id = ?').get(id);
+        if (!existing) throw new ApiError('模板不存在', 404);
+        if (existing.type !== type) throw new ApiError('不能修改模板类型');
+        const row = {
+          id,
+          type,
+          name: cleanName,
+          pages: JSON.stringify(cleanPages),
+          store: existing.store,
+          operator: operator || existing.operator,
+          created_at: existing.created_at,
+          updated_at: now,
+          sync_status: 'pending',
+        };
+        db.prepare(
+          `UPDATE form_templates SET name = ?, pages = ?, operator = ?, updated_at = ?, sync_status = ? WHERE id = ?`
+        ).run(row.name, row.pages, row.operator, row.updated_at, row.sync_status, row.id);
+        recordChange(db, { tableName: 'form_templates', recordId: id, operation: 'upsert', payload: row });
+        return row;
+      }
+      // 新建：检查同类型上限
+      const cnt = db.prepare('SELECT COUNT(*) AS c FROM form_templates WHERE type = ?').get(type);
+      if (Number(cnt?.c || 0) >= TEMPLATE_MAX_PER_TYPE) {
+        throw new ApiError(`${TEMPLATE_TYPE_LABELS[type]}模板已达上限（${TEMPLATE_MAX_PER_TYPE} 个）`);
+      }
+      const newId = uuidv4();
+      const row = {
+        id: newId,
+        type,
+        name: cleanName,
+        pages: JSON.stringify(cleanPages),
+        store,
+        operator,
+        created_at: now,
+        updated_at: now,
+        sync_status: 'pending',
+      };
+      const cols = Object.keys(row).join(', ');
+      const placeholders = Object.keys(row).map(() => '?').join(', ');
+      db.prepare(`INSERT INTO form_templates (${cols}) VALUES (${placeholders})`).run(...Object.values(row));
+      recordChange(db, { tableName: 'form_templates', recordId: newId, operation: 'upsert', payload: row });
+      return row;
+    });
+    res.json(ok({ id: result.id, type, name: cleanName }));
+  })
+);
+
+// 删除（密码确认 + 回收站）
+router.delete(
+  '/templates/:id',
+  asyncHandler(async (req, res) => {
+    const { password } = req.body || {};
+    if (!checkDeletePassword(password)) throw new ApiError('密码错误', 403);
+    const db = getDb();
+    const result = withChangeTx(db, () => {
+      const row = db.prepare('SELECT * FROM form_templates WHERE id = ?').get(req.params.id);
+      if (!row) throw new ApiError('模板不存在', 404);
+      let payload = row;
+      try { payload = { ...row, pages: JSON.parse(row.pages || '[]') }; } catch { /* keep raw */ }
+      saveToRecycleBin(db, 'form_templates', row, String(req.body?.operator || ''));
+      db.prepare('DELETE FROM form_templates WHERE id = ?').run(req.params.id);
+      // 删除留痕日志
+      db.prepare(
+        `INSERT INTO delete_logs (deleted_table, deleted_record_id, store, deleted_at) VALUES (?, ?, ?, ?)`
+      ).run('form_templates', row.id, row.store || '', nowISO());
+      recordChange(db, { tableName: 'form_templates', recordId: row.id, operation: 'delete', payload: null });
+      return { deleted: true, id: row.id };
+    });
+    res.json(ok(result));
   })
 );
 

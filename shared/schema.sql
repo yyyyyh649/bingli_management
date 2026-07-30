@@ -99,12 +99,27 @@ CREATE TABLE IF NOT EXISTS cases (
   review_cycle_days  INTEGER NOT NULL DEFAULT 90,
   condition         TEXT DEFAULT '',         -- 简约模式病情描述
   answers           TEXT DEFAULT '[]',       -- 复杂模式问卷作答 JSON
-  record_date       TEXT NOT NULL,           -- 登记日期 YYYY-MM-DD
+  record_date       TEXT NOT NULL,             -- 登记日期 YYYY-MM-DD
   store             TEXT NOT NULL,
   operator          TEXT DEFAULT '',
   created_at        TEXT NOT NULL,
   updated_at        TEXT NOT NULL,
-  sync_status       TEXT NOT NULL DEFAULT 'pending'
+  sync_status       TEXT NOT NULL DEFAULT 'pending',
+  -- 按用户新需求 Phase D：病例登记移植支付页，保留全部支付优惠信息（与 prescriptions 对称）
+  original_amount          REAL DEFAULT 0,       -- 原价（总金额）
+  discount_type            TEXT DEFAULT '',       -- 'discount' 打折 | 'reduction' 立减 | ''
+  discount_value           REAL DEFAULT 0,        -- 打折:折扣率; 立减:金额
+  discounted_amount        REAL DEFAULT 0,        -- 折后价
+  balance_deduction        REAL DEFAULT 0,        -- 余额抵扣金额
+  balance_deduction_phone  TEXT DEFAULT '',       -- 余额抵扣客户手机号
+  points_deduction         INTEGER DEFAULT 0,     -- 积分抵扣消耗的积分数
+  points_deduction_amount  REAL DEFAULT 0,        -- 积分抵扣折算金额
+  points_deduction_phone   TEXT DEFAULT '',       -- 积分抵扣客户手机号
+  paid_amount              REAL DEFAULT 0,        -- 实付金额
+  points_earned            INTEGER DEFAULT 0,     -- 本次新增积分
+  points_target_phone      TEXT DEFAULT '',       -- 积分归属手机号
+  template_id              TEXT DEFAULT '',       -- 按用户新需求 Phase H：所用模板 id
+  template_answers         TEXT DEFAULT '[]'      -- 模板作答 JSON
 );
 CREATE INDEX IF NOT EXISTS idx_cases_customer_phone ON cases(customer_phone);
 CREATE INDEX IF NOT EXISTS idx_cases_record_date    ON cases(record_date);
@@ -146,7 +161,9 @@ CREATE TABLE IF NOT EXISTS prescriptions (
   operator            TEXT DEFAULT '',
   created_at          TEXT NOT NULL,
   updated_at          TEXT NOT NULL,
-  sync_status         TEXT NOT NULL DEFAULT 'pending'
+  sync_status         TEXT NOT NULL DEFAULT 'pending',
+  template_id         TEXT DEFAULT '',       -- 按用户新需求 Phase H：所用模板 id
+  template_answers    TEXT DEFAULT '[]'      -- 模板作答 JSON
 );
 CREATE INDEX IF NOT EXISTS idx_prescriptions_customer_phone ON prescriptions(customer_phone);
 CREATE INDEX IF NOT EXISTS idx_prescriptions_record_date    ON prescriptions(record_date);
@@ -169,6 +186,41 @@ CREATE TABLE IF NOT EXISTS operators (
 CREATE INDEX IF NOT EXISTS idx_operators_store ON operators(store);
 
 -- ----------------------------------------------------------------------------
+-- 4.9 会员积分档位配置（按用户新需求 Phase G：1-10档，自定义档位名+阈值+年度清零）
+-- 单行配置（id 固定为 'default'），tiers 为 JSON 数组，按阈值升序：
+--   [{"name":"普通","threshold":0}, {"name":"银卡","threshold":1000}, ...]
+-- reset_month/reset_day 为空表示永不清零
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS point_tier_config (
+  id           TEXT PRIMARY KEY DEFAULT 'default',
+  tiers        TEXT DEFAULT '[]',
+  reset_month  INTEGER DEFAULT NULL,
+  reset_day    INTEGER DEFAULT NULL,
+  updated_at   TEXT NOT NULL,
+  sync_status  TEXT NOT NULL DEFAULT 'pending'
+);
+
+-- ----------------------------------------------------------------------------
+-- 4.10 验光单/病例模板（按用户新需求 Phase H）
+-- type: 'prescription' | 'case'，每类型最多 10 个模板
+-- pages: JSON 数组，结构为 [{ items: [{ id, type:'choice'|'text', label, width(1-4),
+--          required, options:[string] }] }]，"其他"选项在渲染时自动追加、不入库
+-- 个人信息页固定，模板只描述验光/检查/手术内容
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS form_templates (
+  id           TEXT PRIMARY KEY,
+  type         TEXT NOT NULL,                 -- 'prescription' | 'case'
+  name         TEXT NOT NULL,                 -- 模板名称
+  pages        TEXT NOT NULL DEFAULT '[]',    -- JSON: pages 数组
+  store        TEXT NOT NULL,
+  operator     TEXT DEFAULT '',
+  created_at   TEXT NOT NULL,
+  updated_at   TEXT NOT NULL,
+  sync_status  TEXT NOT NULL DEFAULT 'pending'
+);
+CREATE INDEX IF NOT EXISTS idx_form_templates_type ON form_templates(type);
+
+-- ----------------------------------------------------------------------------
 -- 5.6 删除留痕日志（永久保留，不可再删除）
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS delete_logs (
@@ -179,6 +231,23 @@ CREATE TABLE IF NOT EXISTS delete_logs (
   deleted_at        TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_delete_logs_deleted_at ON delete_logs(deleted_at);
+
+-- ----------------------------------------------------------------------------
+-- 5.7 回收站（按用户新需求 Phase C：软删除保留30天，可恢复，禁删回收站内容）
+-- 删除时把完整记录快照存入此表；30天后自动清理；期间可恢复
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS recycle_bin (
+  id           TEXT PRIMARY KEY,             -- UUID
+  table_name   TEXT NOT NULL,                -- 原始表名
+  record_id    TEXT NOT NULL,                -- 原始记录 id
+  payload      TEXT NOT NULL,                -- 完整记录 JSON 快照
+  store        TEXT NOT NULL,
+  operator     TEXT DEFAULT '',
+  deleted_at   TEXT NOT NULL,                -- 删除时间（ISO）
+  expires_at   TEXT NOT NULL                 -- deleted_at + 30天（ISO），到期后自动清理
+);
+CREATE INDEX IF NOT EXISTS idx_recycle_bin_expires_at ON recycle_bin(expires_at);
+CREATE INDEX IF NOT EXISTS idx_recycle_bin_table      ON recycle_bin(table_name, record_id);
 
 -- ============================================================================
 -- 以下为同步机制相关表

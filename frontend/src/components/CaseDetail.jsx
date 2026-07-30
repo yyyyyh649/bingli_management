@@ -26,20 +26,24 @@ export default function CaseDetail({ caseRecord }) {
   const c = caseRecord || {};
   const isComplex = c.mode === CASE_MODE.COMPLEX;
   const ans = useAnswers(c);
+  const hasPayment = Number(c.original_amount || 0) > 0 || Number(c.paid_amount || 0) > 0;
 
   // 简约模式
   if (!isComplex) {
     return (
-      <Descriptions size="small" column={1} bordered>
-        <Descriptions.Item label="姓名">{c.customer_name || '-'}</Descriptions.Item>
-        <Descriptions.Item label="性别">{c.customer_gender || '-'}</Descriptions.Item>
-        <Descriptions.Item label="手机号">{c.customer_phone || '-'}</Descriptions.Item>
-        <Descriptions.Item label="住址">{c.customer_address || '-'}</Descriptions.Item>
-        <Descriptions.Item label="病情">{c.condition || '-'}</Descriptions.Item>
-        <Descriptions.Item label="登记日期">{c.record_date || '-'}</Descriptions.Item>
-        <Descriptions.Item label="登记人">{c.operator || '-'}</Descriptions.Item>
-        <Descriptions.Item label="登记门店">{c.store || '-'}</Descriptions.Item>
-      </Descriptions>
+      <div>
+        <Descriptions size="small" column={1} bordered>
+          <Descriptions.Item label="姓名">{c.customer_name || '-'}</Descriptions.Item>
+          <Descriptions.Item label="性别">{c.customer_gender || '-'}</Descriptions.Item>
+          <Descriptions.Item label="手机号">{c.customer_phone || '-'}</Descriptions.Item>
+          <Descriptions.Item label="住址">{c.customer_address || '-'}</Descriptions.Item>
+          <Descriptions.Item label="病情">{c.condition || '-'}</Descriptions.Item>
+          <Descriptions.Item label="登记日期">{c.record_date || '-'}</Descriptions.Item>
+          <Descriptions.Item label="登记人">{c.operator || '-'}</Descriptions.Item>
+          <Descriptions.Item label="登记门店">{c.store || '-'}</Descriptions.Item>
+        </Descriptions>
+        {hasPayment && <PaymentInfoBlock c={c} />}
+      </div>
     );
   }
 
@@ -150,6 +154,7 @@ export default function CaseDetail({ caseRecord }) {
           { key: 'm7', label: '模块7：手术相关', children: <SurgeryDetail surgery={surgery} diagnosis={diagnosis} /> },
         ]}
       />
+      {hasPayment && <PaymentInfoBlock c={c} />}
     </div>
   );
 }
@@ -279,4 +284,39 @@ function SurgeryDetail({ surgery, diagnosis }) {
   }
 
   return items.length === 0 ? <Empty /> : <Collapse size="small" items={items} />;
+}
+
+// 按用户新需求 Phase D：病例支付优惠信息展示（保留所有支付记录）
+function PaymentInfoBlock({ c }) {
+  const discountLabel =
+    c.discount_type === 'discount'
+      ? `打折 ${(Number(c.discount_value || 0) * 10).toFixed(1)}折`
+      : c.discount_type === 'reduction'
+      ? `立减 ¥${Number(c.discount_value || 0).toFixed(2)}`
+      : null;
+  return (
+    <Descriptions size="small" column={2} bordered style={{ marginTop: 12 }} title={<Text strong>支付信息</Text>}>
+      <Descriptions.Item label="原价（总金额）">¥{Number(c.original_amount || 0).toFixed(2)}</Descriptions.Item>
+      <Descriptions.Item label="折扣">{discountLabel || '无'}</Descriptions.Item>
+      <Descriptions.Item label="折后价">¥{Number(c.discounted_amount || 0).toFixed(2)}</Descriptions.Item>
+      <Descriptions.Item label="余额抵扣">
+        {Number(c.balance_deduction || 0) > 0
+          ? `¥${Number(c.balance_deduction).toFixed(2)}（${c.balance_deduction_phone || '-'}）`
+          : '无'}
+      </Descriptions.Item>
+      <Descriptions.Item label="积分抵扣">
+        {Number(c.points_deduction || 0) > 0
+          ? `${c.points_deduction} 分（¥${Number(c.points_deduction_amount || 0).toFixed(2)}，${c.points_deduction_phone || '-'}）`
+          : '无'}
+      </Descriptions.Item>
+      <Descriptions.Item label="实付金额">
+        <Text strong style={{ color: '#1677ff' }}>¥{Number(c.paid_amount || 0).toFixed(2)}</Text>
+      </Descriptions.Item>
+      {Number(c.points_earned || 0) > 0 && (
+        <Descriptions.Item label="新增积分" span={2}>
+          {c.points_earned} 分 → {c.points_target_phone || '-'}
+        </Descriptions.Item>
+      )}
+    </Descriptions>
+  );
 }

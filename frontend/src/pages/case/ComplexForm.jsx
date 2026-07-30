@@ -24,6 +24,8 @@ import { CASE_MODE, DEPARTMENT } from '@optical/shared/constants.js';
 import SurgeryModule from '../../components/SurgeryModule.jsx';
 import PhoneInput, { phoneStatus, phoneHelp } from '../../components/PhoneInput.jsx';
 import CandidatePicker from '../../components/CandidatePicker.jsx';
+import PaymentModal from '../prescription/PaymentModal.jsx';
+import { ApiError, DUPLICATE_CONFIRM_REQUIRED } from '../../api/client.js';
 
 const { Text, Title } = Typography;
 
@@ -51,6 +53,9 @@ export default function CaseComplexForm() {
   });
   // 按 IMPLEMENTATION.md Phase 2 / 1.5：店员在候选列表选择的客户标识
   const [customerRefId, setCustomerRefId] = useState('');
+  // 按用户新需求 Phase D：病例登记移植支付页
+  const [originalAmount, setOriginalAmount] = useState(0);
+  const [payModalOpen, setPayModalOpen] = useState(false);
 
   // 完整 answers（7 模块数据）
   const [ans, setAns] = useState(INITIAL_COMPLEX_ANSWERS);
@@ -153,28 +158,65 @@ export default function CaseComplexForm() {
 
   // ===== 提交病例 =====
   const [submitting, setSubmitting] = useState(false);
-  const save = async () => {
+  const save = () => {
     if (!basic.customer_name) { message.warning('请填写患者姓名'); return; }
     if (!basic.operator) { message.warning('请选择登记人'); return; }
+    if (!basic.customer_phone) { message.warning('请填写手机号'); return; }
+    if (!basic.customer_gender) { message.warning('请选择性别'); return; }
+    // 按用户新需求 Phase D：先弹支付弹窗，确认后提交
+    setPayModalOpen(true);
+  };
+
+  const buildPayload = (paymentResult, confirmDuplicate = false) => {
+    const payload = {
+      mode: CASE_MODE.COMPLEX,
+      customerName: basic.customer_name,
+      customerGender: basic.customer_gender,
+      customerPhone: basic.customer_phone,
+      customerAddress: basic.customer_address,
+      answers: JSON.stringify(ans),
+      recordDate: basic.record_date || dayjs().format('YYYY-MM-DD'),
+      operator: basic.operator,
+      // 支付参数（按用户新需求 Phase D）
+      originalAmount,
+      discountType: paymentResult.discountType,
+      discountValue: paymentResult.discountValue,
+      balanceDeduction: paymentResult.balanceDeduction,
+      balanceDeductionPhone: paymentResult.balanceDeductionPhone,
+      pointsDeduction: paymentResult.pointsDeduction,
+      pointsDeductionPhone: paymentResult.pointsDeductionPhone,
+      paidAmount: paymentResult.paidAmount,
+      pointsEarned: paymentResult.pointsEarned,
+      pointsTargetPhone: paymentResult.pointsTargetPhone,
+    };
+    if (confirmDuplicate) payload.confirmDuplicate = true;
+    return payload;
+  };
+
+  const doSubmit = async (paymentResult, confirmDuplicate = false) => {
     setSubmitting(true);
     try {
-      await createCase({
-        mode: CASE_MODE.COMPLEX,
-        customerName: basic.customer_name,
-        customerGender: basic.customer_gender,
-        customerPhone: basic.customer_phone,
-        customerAddress: basic.customer_address,
-        // 按 IMPLEMENTATION.md Phase 2 / 1.5：店员选择的客户标识
-        customerRefId: customerRefId || '',
-        answers: JSON.stringify(ans),
-        recordDate: basic.record_date || dayjs().format('YYYY-MM-DD'),
-        operator: basic.operator,
-      });
+      const payload = buildPayload(paymentResult, confirmDuplicate);
+      await createCase(payload);
       message.success('复杂病例已保存');
-      if (basic.customer_phone) setSaved({ phone: basic.customer_phone });
+      setPayModalOpen(false);
+      const targetPhone = paymentResult.pointsTargetPhone || basic.customer_phone;
+      if (targetPhone) setSaved({ phone: targetPhone });
       else navigate('/case');
     } catch (e) {
-      // 拦截器已提示
+      if (e instanceof ApiError && e.code === DUPLICATE_CONFIRM_REQUIRED) {
+        const existing = e.data?.existingRecord || e.data || {};
+        const dateStr = existing.record_date || existing.created_at || '(未知日期)';
+        Modal.confirm({
+          title: '重复登记确认',
+          content: `已存在一条相同数值的积分记录，登记于 ${dateStr}，是否仍要继续登记？`,
+          okText: '继续登记',
+          cancelText: '取消',
+          onOk: () => doSubmit(paymentResult, true),
+        });
+        return;
+      }
+      // 其它错误拦截器已提示
     } finally {
       setSubmitting(false);
     }
@@ -373,14 +415,37 @@ export default function CaseComplexForm() {
         />
       )}
 
-      {/* 导航按钮（模块2-7） */}
+      {/* 导航按钮（模块2-7）+ 总金额输入 */}
       {step > 0 && (
-        <div style={{ marginTop: 16, display: 'flex', justifyContent: 'space-between' }}>
-          <Button onClick={() => goto(followupOnly ? 6 : step - 1)}>← 上一模块</Button>
-          <Space>
-            <Button type="primary" onClick={save} loading={submitting}>保存病例</Button>
-            {step < 6 && !followupOnly && <Button type="primary" onClick={() => goto(step + 1)}>下一模块 →</Button>}
-          </Space>
+        <div style={{ marginTop: 16 }}>
+          {/* 按用户新需求 Phase D：病例登记最后填总金额，进入支付页面 */}
+          {!followupOnly || step === 6 ? (
+            <Card size="small" style={{ marginBottom: 12, background: '#fafafa' }}>
+              <Space align="center" wrap>
+                <Text strong>总金额：</Text>
+                <InputNumber
+                  min={0}
+                  step={0.01}
+                  precision={2}
+                  prefix="¥"
+                  value={originalAmount || null}
+                  onChange={(v) => setOriginalAmount(Number(v) || 0)}
+                  placeholder="本次病例总金额"
+                  style={{ width: 200 }}
+                />
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  填写后点击「保存病例」进入支付页面
+                </Text>
+              </Space>
+            </Card>
+          ) : null}
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <Button onClick={() => goto(followupOnly ? 6 : step - 1)}>← 上一模块</Button>
+            <Space>
+              <Button type="primary" onClick={save} loading={submitting}>保存病例</Button>
+              {step < 6 && !followupOnly && <Button type="primary" onClick={() => goto(step + 1)}>下一模块 →</Button>}
+            </Space>
+          </div>
         </div>
       )}
 
@@ -389,11 +454,20 @@ export default function CaseComplexForm() {
         <Card size="small" style={{ marginTop: 16 }}>
           <Text>病例已保存。是否前往该客户的积分页面？</Text>
           <Space style={{ marginLeft: 16 }}>
-            <Button type="primary" onClick={() => navigate(`/customer/${encodeURIComponent(saved.phone)}`)}>是，前往</Button>
+            <Button type="primary" onClick={() => navigate(`/customer/profile/${encodeURIComponent(saved.phone)}`)}>是，前往</Button>
             <Button onClick={() => navigate('/case')}>否</Button>
           </Space>
         </Card>
       )}
+
+      {/* 按用户新需求 Phase D：支付弹窗 */}
+      <PaymentModal
+        open={payModalOpen}
+        originalAmount={originalAmount}
+        selfPhone={basic.customer_phone || ''}
+        onOk={(result) => doSubmit(result)}
+        onCancel={() => setPayModalOpen(false)}
+      />
     </Card>
   );
 }

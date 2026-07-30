@@ -29,3 +29,46 @@ export function getRechargeStats({ phone = '', startDate = '', endDate = '' } = 
 export function getAuditQuery({ date = '', hour = '', table = '', operation = '', store = '' } = {}) {
   return client.get('/admin/audit-query', { params: { date, hour, table, operation, store } });
 }
+
+// 按用户新需求 Phase C：回收站
+export function listRecycleBin(table = '') {
+  return client.get('/admin/recycle-bin', { params: { table } });
+}
+
+export function restoreRecycleBin(id, password) {
+  return client.post(`/admin/recycle-bin/${id}/restore`, { password });
+}
+
+// 按用户新需求 Phase G：会员积分档位管理
+export function getPointTiers() {
+  return client.get('/admin/point-tiers');
+}
+
+export function savePointTiers(payload) {
+  return client.post('/admin/point-tiers', payload);
+}
+
+export function getMemberTier(phone) {
+  return client.get(`/admin/point-tiers/member/${encodeURIComponent(phone)}`);
+}
+
+export function listMemberTiers(tierIndex = '') {
+  return client.get('/admin/point-tiers/members', { params: { tier: tierIndex } });
+}
+
+// 按用户新需求 Phase H：验光单/病例模板编辑
+export function listTemplates(type = '') {
+  return client.get('/admin/templates', { params: { type } });
+}
+
+export function getTemplate(id) {
+  return client.get(`/admin/templates/${id}`);
+}
+
+export function saveTemplate(payload) {
+  return client.post('/admin/templates', payload);
+}
+
+export function deleteTemplate(id, password) {
+  return client.delete(`/admin/templates/${id}`, { data: { password } });
+}

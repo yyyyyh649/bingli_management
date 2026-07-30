@@ -17,11 +17,13 @@ import {
   Input,
   Select,
   message,
+  Typography,
 } from 'antd';
 import { EditOutlined, WalletOutlined, BellOutlined } from '@ant-design/icons';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getCustomerProfile, updateCustomer, updateCustomerReview } from '../../api/customers.js';
 import { createBalance } from '../../api/balance.js';
+import { getMemberTier } from '../../api/admin.js';
 import { useOperators } from '../../api/operators.js';
 import { BALANCE_SOURCE, DEFAULT_REVIEW_CYCLE_DAYS, REVIEW_CONTACT_STATUS, REVIEW_CONTACT_STATUS_LABELS } from '@optical/shared/constants.js';
 import PointsLedgerTable from '../../components/PointsLedgerTable.jsx';
@@ -29,6 +31,8 @@ import BalanceLedgerTable from '../../components/BalanceLedgerTable.jsx';
 import CaseDetail from '../../components/CaseDetail.jsx';
 import PrescriptionDetail from '../../components/PrescriptionDetail.jsx';
 import { CASE_MODE } from '@optical/shared/constants.js';
+
+const { Text } = Typography;
 
 export default function CustomerProfile() {
   const { phone } = useParams();
@@ -47,12 +51,25 @@ export default function CustomerProfile() {
   const [editSubmitting, setEditSubmitting] = useState(false);
   const [editForm] = Form.useForm();
   const { operators } = useOperators();
+  // 按用户新需求 Phase G：会员档位信息（仅真会员查询）
+  const [tierInfo, setTierInfo] = useState(null);
 
   const load = async () => {
     setLoading(true);
     try {
       const profile = await getCustomerProfile(phone);
       setData(profile);
+      // 仅真会员查询档位
+      if (profile?.customer?.member_card_no) {
+        try {
+          const ti = await getMemberTier(profile.customer.phone || phone);
+          setTierInfo(ti);
+        } catch {
+          setTierInfo(null);
+        }
+      } else {
+        setTierInfo(null);
+      }
     } catch (e) {
       // 拦截器已提示
     } finally {
@@ -226,7 +243,12 @@ export default function CustomerProfile() {
         }
       >
         <Descriptions size="small" column={2} bordered>
-          <Descriptions.Item label="姓名">{customer.name || '-'}</Descriptions.Item>
+          <Descriptions.Item label="姓名">
+            {customer.name || '-'}
+            {tierInfo && tierInfo.tierIndex >= 0 && (
+              <Tag color="gold" style={{ marginLeft: 8 }}>{tierInfo.tierName}</Tag>
+            )}
+          </Descriptions.Item>
           <Descriptions.Item label="手机号">{customer.phone || phone}</Descriptions.Item>
           <Descriptions.Item label="住址">{customer.address || '-'}</Descriptions.Item>
           <Descriptions.Item label="会员卡号">
@@ -236,6 +258,12 @@ export default function CustomerProfile() {
               <Tag>非会员</Tag>
             )}
           </Descriptions.Item>
+          {tierInfo && tierInfo.tierIndex >= 0 && (
+            <Descriptions.Item label="累计积分 / 档位">
+              <Text strong style={{ color: '#1677ff' }}>{Number(tierInfo.cumulative || 0)}</Text> 分
+              <Tag color="orange" style={{ marginLeft: 8 }}>{tierInfo.tierName}</Tag>
+            </Descriptions.Item>
+          )}
           <Descriptions.Item label="创建门店">{customer.store || '-'}</Descriptions.Item>
           <Descriptions.Item label="登记人">{customer.operator || '-'}</Descriptions.Item>
           <Descriptions.Item label="复查周期">

@@ -7,8 +7,21 @@ import { recordChange, withChangeTx } from '../lib/outbox.js';
 import { nowISO, todayDate } from '@optical/shared/constants.js';
 import { REVIEW_CONTACT_STATUS, DEFAULT_REVIEW_CYCLE_DAYS } from '@optical/shared/constants.js';
 import { checkDeletePassword } from '../lib/password.js';
+import { saveToRecycleBin } from '../lib/recycleBin.js';
+import { getTierConfig, getCumulativePoints, getTierForPoints } from '../lib/pointTier.js';
 
 const router = Router();
+
+// 给会员行附加档位信息（tierName/tierIndex/cumulative），用于名字后展示档位
+function attachTierInfo(db, rows) {
+  if (!rows || rows.length === 0) return rows;
+  const config = getTierConfig(db);
+  return rows.map((r) => {
+    const cumulative = getCumulativePoints(db, r.phone, config);
+    const tier = getTierForPoints(cumulative, config);
+    return { ...r, cumulative_points: cumulative, tier_index: tier.index, tier_name: tier.name };
+  });
+}
 
 // 手机号校验：11 位数字
 function validatePhone(phone) {
@@ -41,7 +54,7 @@ router.get('/', (req, res) => {
   const rows = db
     .prepare(`SELECT * FROM customers WHERE ${MEMBER_WHERE} ORDER BY created_at DESC LIMIT 500`)
     .all();
-  res.json(ok(rows));
+  res.json(ok(attachTierInfo(db, rows)));
 });
 
 // 模糊查询（手机号后4位 / 完整手机号 / 姓名 / 会员卡号）
@@ -67,7 +80,7 @@ router.get('/search', (req, res) => {
       )
       .all(`%${q}%`, `%${q}%`);
   }
-  res.json(ok(rows));
+  res.json(ok(attachTierInfo(db, rows)));
 });
 
 // 按 IMPLEMENTATION.md Phase 2：候选列表接口（会员匹配 ∪ 客户历史代表）
@@ -569,6 +582,7 @@ router.delete(
     if (!existing) throw new ApiError('客户不存在', 404);
 
     withChangeTx(db, () => {
+      saveToRecycleBin(db, 'customers', existing);
       db.prepare('DELETE FROM customers WHERE id = ?').run(id);
       // 注意：积分明细、病例、验光单不级联删除（保留历史）；用户单独删
       recordChange(db, { tableName: 'customers', recordId: id, operation: 'delete', payload: null });

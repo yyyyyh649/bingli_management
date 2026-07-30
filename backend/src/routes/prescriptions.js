@@ -9,6 +9,7 @@ import { checkDeletePassword } from '../lib/password.js';
 import { findDuplicatePoints } from '../lib/duplicate.js';
 import { ensureCustomer, resolveCustomerRefId } from '../lib/customer.js';
 import { triggerPointsImmediatePush } from '../sync/index.js';
+import { saveToRecycleBin } from '../lib/recycleBin.js';
 
 const router = Router();
 
@@ -316,6 +317,7 @@ router.delete(
     if (!existing) throw new ApiError('验光单不存在', 404);
 
     withChangeTx(db, () => {
+      saveToRecycleBin(db, 'prescriptions', existing);
       db.prepare('DELETE FROM prescriptions WHERE id = ?').run(id);
       recordChange(db, { tableName: 'prescriptions', recordId: id, operation: 'delete', payload: null });
       db.prepare(

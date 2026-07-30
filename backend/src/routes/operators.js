@@ -6,6 +6,7 @@ import { getDb } from '../db.js';
 import { recordChange, withChangeTx } from '../lib/outbox.js';
 import { nowISO, DEPARTMENT } from '@optical/shared/constants.js';
 import { checkDeletePassword } from '../lib/password.js';
+import { saveToRecycleBin } from '../lib/recycleBin.js';
 
 const router = Router();
 
@@ -110,6 +111,7 @@ router.delete(
     if (!existing) throw new ApiError('登记人不存在', 404);
 
     withChangeTx(db, () => {
+      saveToRecycleBin(db, 'operators', existing);
       db.prepare('DELETE FROM operators WHERE id = ?').run(id);
       recordChange(db, { tableName: 'operators', recordId: id, operation: 'delete', payload: null });
       db.prepare(
