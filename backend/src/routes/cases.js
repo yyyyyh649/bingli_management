@@ -6,7 +6,7 @@ import { getDb } from '../db.js';
 import { recordChange, withChangeTx } from '../lib/outbox.js';
 import { nowISO, CASE_MODE, todayDate, DEPARTMENT } from '@optical/shared/constants.js';
 import { checkDeletePassword } from '../lib/password.js';
-import { ensureCustomer } from '../lib/customer.js';
+import { ensureCustomer, resolveCustomerRefId } from '../lib/customer.js';
 
 const router = Router();
 
@@ -65,14 +65,14 @@ router.post(
     // 校验登记人必须属于眼科部
     assertOphthalmologyOperator(db, operator);
 
-    // 按 IMPLEMENTATION.md 1.5 / Phase 2：确定 customer_ref_id
-    // 店员选了会员/历史 → 继承该 refId；未选或新建 → 自引用（= 本条记录 id）
-    const providedRefId = String(customerRefId || '').trim();
-
     const id = uuidv4();
     const store = process.env.STORE_ID || 'store1';
     const now = nowISO();
     const recDate = recordDate || todayDate();
+
+    // 按用户新需求：姓名+手机号必填，自动按「同手机号+同姓名」判定同一人，
+    // 不再依赖店员手选候选。命中 → 继承已有 customer_ref_id；未命中 → 自引用（本条 id）。
+    const resolvedRefId = resolveCustomerRefId(db, cleanPhone, cleanName);
 
     const row = {
       id,
@@ -81,8 +81,7 @@ router.post(
       customer_phone: cleanPhone,
       customer_gender: cleanGender,
       customer_address: String(customerAddress || ''),
-      // 按 IMPLEMENTATION.md 1.5 / Phase 2：店员选了候选 → 继承其 refId；未选 → 自引用（id）
-      customer_ref_id: providedRefId || id,
+      customer_ref_id: resolvedRefId || id,
       review_cycle_days: Number(req.body?.reviewCycleDays) || 90,
       condition: String(condition || ''),
       answers:

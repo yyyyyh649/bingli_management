@@ -80,3 +80,36 @@ export function ensureCustomer(db, { phone, name = '', address = '', operator = 
   recordChange(db, { tableName: 'customers', recordId: id, operation: 'upsert', payload: row });
   return row;
 }
+
+/**
+ * 按姓名+手机号自动判定同一人，返回应使用的 customer_ref_id。
+ * 规则（按用户新需求，替代旧版"店员选候选"逻辑）：
+ *   - 在 cases + prescriptions 中查「手机号相同 AND 姓名相同」的最早一条记录
+ *   - 命中 → 继承其 customer_ref_id（同一个人）
+ *   - 未命中 → 返回 null，调用方用本条记录 id 自引用（这个人的"起点"）
+ *
+ * 复查时间按 customer_ref_id 分组、同类记录分开算（验光单/病例各自独立），
+ * customer_ref_id 跨表共享同一个人的标识。
+ *
+ * @param {object} db
+ * @param {string} phone  已校验格式的手机号
+ * @param {string} name   已 trim 的姓名
+ * @returns {string|null} 已有 customer_ref_id 或 null（自引用）
+ */
+export function resolveCustomerRefId(db, phone, name) {
+  if (!phone || !name) return null;
+  const row = db
+    .prepare(
+      `SELECT customer_ref_id FROM (
+         SELECT customer_ref_id, created_at FROM cases
+           WHERE customer_phone = ? AND customer_name = ? AND customer_ref_id IS NOT NULL AND customer_ref_id != ''
+         UNION ALL
+         SELECT customer_ref_id, created_at FROM prescriptions
+           WHERE customer_phone = ? AND customer_name = ? AND customer_ref_id IS NOT NULL AND customer_ref_id != ''
+       )
+       ORDER BY created_at ASC
+       LIMIT 1`
+    )
+    .get(phone, name, phone, name);
+  return row?.customer_ref_id || null;
+}
